@@ -1,1 +1,1 @@
-{:main cardtask.core :optimizations :none}
+{:main cardtask.core :optimizations :none :infer-externs true}
