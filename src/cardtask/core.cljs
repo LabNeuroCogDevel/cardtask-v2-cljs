@@ -1,5 +1,8 @@
 (ns cardtask.core
   (:require
+   [cljs.spec.alpha :as s]
+   [goog.events.KeyCodes :as keycodes]
+   [goog.events :as gev]
    [cljsjs.react]
    [cljsjs.react.dom]
    [sablono.core :as sab :include-macros true]
@@ -19,6 +22,7 @@
                :right ["j"] ;; 74
                :next [32] ;; space
                })
+(defonce CARDPUSHES {:left 1 :right 1 :middle 3})
 
 ;; TODO: counterbalence. switch element 1 and 2
 (defonce SCHEME
@@ -27,6 +31,23 @@
   :p100100 {:left 100 :middle 100 :right 100 :rep 3}})
 
 (defonce CARDIMGS (zipmap SIDES (take 3 (shuffle ["✿", "❖", "✢", "⚶", "⚙", "✾"]))))
+
+;; how to handle each event
+(defn cards-disp
+ "display cards. using states current card"
+ [{:keys [cards-cur time-cur time-flip]}]
+  (sab/html [:div.cards
+   [:h1 "CARDS"]
+   [:h2 "new3"]
+]))
+
+(defn feedback-disp [state]
+  (sab/html [:h1 "FEEDBACK"]))
+
+
+;; settings for events
+(def EVENTDISPATCH {:card {:dur 1500 :func #'cards-disp :next :feedback}
+                    :feedback {:dur 1500 :func #'feedback-disp :next :card}})
 
 (defn sort-side
   "put in order L to R order. overkill. keys are sorted themselve"
@@ -40,23 +61,25 @@
   [block]
   (let [trials (distinct (for [s1 SIDES s2 SIDES
                      :when (not= s1 s2)]
-                 (sort-side (list {:side s1 :prob (s1 block)}
-                       {:side s2 :prob (s2 block)}))))]
+                 (sort-side (list
+                             {:side s1 :prob (s1 block) :npush (s1 CARDPUSHES)}
+                             {:side s2 :prob (s2 block) :npush (s2 CARDPUSHES)}))))]
     (shuffle (apply concat (repeat (:rep block) trials)))))
 
 (defn cardseq "" [p3_and_rep]
   ; [{:left 80 :middle 100 :right 20 :rep 3}]
-  (for [b p3_and_rep] (mkblock b)))
+  (apply concat (for [b p3_and_rep] (mkblock b))))
 
 
-(def event-states [:instruction :card :feeback])
+(def event-states [:instruction :card :feeback]) ; unused
+
 ;; from flappy bird demo
 (def starting-state {:running? false
                      :event-name :card ; :instruction :card :feedback
                      :time-start 0
                      :time-cur 0
                      :time-delta 0
-                     :last-flip 0
+                     :time-flip 0
 
                      :cards-cur []
                      :cards-list [] ; [ [{card1}, {card2}], [], ... ]
@@ -73,19 +96,31 @@
   NB. @STATE needs to be passed in so its updates are global?!"
  [_ time]
   (-> starting-state
-      (assoc :time-start time :time-cur time :last-flip time
-             :card-list (cardseq SCHEME)
+      (assoc :time-start time :time-cur time :time-flip time
+             :cards-list (cardseq (vals SCHEME))
              :running? true)))
 
+(defn task-next-trial [state]
+  "update trial. get new card. NB. nth is 0 based. trial is not(?)"
+  (let [trial (:trial state) next-trial (inc trial)]
+    (assoc state
+           :trial next-trial
+           :cards-cur (nth (:cards-list state) trial))))
+
 (defn event-next?
-  "based on current event and time-dela, do we need to update?
+  "based on current event and time-delta, do we need to update?
    returns updated state"
   [state time]
   (let [cur (:time-cur state)
         last (:time-flip state)
-        card-list (:card-list state)]
-    (if (> (- cur last) CARDDUR)
-      state ;(assoc state :card-list (pop card-list))
+        dispatch (-> state :event-name EVENTDISPATCH)
+        dur (:dur dispatch)
+        next (:next dispatch)]
+    (if (> (- cur last) dur)
+      (assoc
+       (if (= next :card) (task-next-trial state) state)
+       :event-name next
+       :time-flip time)
       state)))
 
 (defn time-update
@@ -98,49 +133,71 @@
      ;additional updates to state
 ))
 
-(defonce STATE (atom starting-state))
+; was defonce but happy to reset when resourced
+(def STATE (atom starting-state))
+
 
 (defn run-loop [time]
-  "recursive loop to keep the task running"
+  "recursive loop to keep the task running.
+   only changes time, which is picked up by watcher that runs render"
   (let [new-state (swap! STATE (partial time-update time))]
   (when (:running? new-state)
     (go (<! (timeout 30))
             (.requestAnimationFrame js/window run-loop)))))
 
 (defn task-start
-  "will stop if not :running?"
+  "kick of run-loop. will stop if not :running?"
   []
-  (println "starting task!")
-  (println STATE)
   (.requestAnimationFrame
    js/window
    (fn [time]
-     (reset! STATE (state-fresh @STATE time))
+     (if (= (-> @STATE :cards-cur count) 0)
+       (reset! STATE (state-fresh @STATE time)))
      (run-loop time))))
+
+(defn task-toggle "start and stop the timer. does not clear time" []
+  (let [toggle (not (:running? @STATE))]
+  (reset! STATE (assoc @STATE :running? toggle))
+  (if toggle (task-start))))
+
+(defn task-stop "turn off the task. resets STATE/clears time" []
+  (reset! STATE
+         (-> @STATE
+             (state-fresh 0)
+             (assoc :running? false))))
+
 
 (defn keypress [e state]
   (println e)
   (.preventDefault e))
 
-
 (defn task-display
   "html to render for display. updates for any change in display
-   TODO. different display for card, feedback, and instructions"
-  [{:keys [cards event score] :as state}]
-  (sab/html
-   [:div.board
-    {:onKeyPress (fn [e] (keypress e STATE))}
-    [:h1.score (str "SCORE: " score)]
-    [:h3.run "running? " (str (:running? state))]
-    ;[:h2.time "time: " (:time-cur state)]
-]))
+   "
+  [{:keys [cards-cur event-name score] :as state}]
+
+  (let [f (:func (event-name EVENTDISPATCH))]
+   (sab/html
+    [:div.board
+     {:onKeyPress (fn [e] (keypress e @STATE))}
+     [:h1.score (str "SCORE: " score)]
+     [:h3.run "running? " (str (:running? state))]
+     (if f (f state))
+     ; lookup what todo for this state
+     [:p.time {:style {:size "smaller"}} "time: " (:time-cur state)]
+])))
 
 
 (let [node (.getElementById js/document "task")]
-  (defn renderer
-    "what id to fill w/#task-display"
-    [full-state]
-    (.render js/ReactDOM (task-display full-state) node)))
+  (defn showme-this
+  "show a sab/html element where we'd normally run task-display"
+  [reactdom]
+    (.render js/ReactDOM reactdom node)))
+
+(defn renderer
+  "used by watcher. triggered by animation step's change to time"
+  [full-state]
+  (showme-this (task-display full-state)))
 
 (defn world
   "function for anything used to wrap state.
@@ -150,6 +207,5 @@
 
 (add-watch STATE :renderer (fn [_ _ _ n] (renderer (world n))))
 
-; force a change that starts rendering
-(reset! STATE @STATE)
+(reset! STATE @STATE) ; why?
 (task-start)
