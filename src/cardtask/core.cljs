@@ -5,6 +5,7 @@
    [goog.events :as gev]
    [cljsjs.react]
    [cljsjs.react.dom]
+   [cljs-bach.synthesis :as snd]
    [sablono.core :as sab :include-macros true]
    [cljs.core.async :refer [<! chan sliding-buffer put! close! timeout]])
   (:require-macros  [cljs.core.async.macros :refer [go-loop go]]))
@@ -72,6 +73,24 @@
 
 
 (def event-states [:instruction :card :feeback]) ; unused
+;; audo
+(defonce audio-context (snd/audio-context))
+(def SOUNDS {:reward [{:url "audio/cash.mp3"    :dur .5}
+                      {:url "audio/cheer.mp3"   :dur .5}
+                      {:url "audio/trumpet.mp3" :dur .5}]
+             :empty  [{:url "audio/buzzer.mp3"  :dur .5}
+                      {:url "audio/cry.mp3"     :dur .5}
+                      {:url "audio/alarm.mp3"   :dur .5}]})
+; preload
+(for [url (map #(:url %) (-> SOUNDS :reward))] snd/sample)
+; NB. could use e.g. (snd/square 440) for beeeeep
+(defn play-audio
+  [{:keys [url dur]}]
+  (snd/run-with
+   (snd/connect-> (snd/sample url) snd/destination)
+   audio-context
+   (snd/current-time audio-context)
+   dur))
 
 ;; from flappy bird demo
 (def starting-state {:running? false
