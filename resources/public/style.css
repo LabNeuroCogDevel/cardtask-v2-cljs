@@ -1,0 +1,8 @@
+ul.bar {margin: 0; padding:0;}
+ul.bar li {display:inline-block; margin-right: 1em; background-color:lightblue; cursor: pointer;}
+
+.running {background-color: green;}
+.stopped {background-color: yellow;}
+.debug {border: solid black 1px; background-color:lightgray}
+
+.debug > p {display:inline-block; margin-right: .5em}

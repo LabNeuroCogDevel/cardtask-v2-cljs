@@ -189,22 +189,30 @@
 (defn keypress [e state]
   (println e)
   (.preventDefault e))
+(defn show-debug "debug info. displayed on top of task"
+[state]
+(sab/html
+ [:div.debug
+  [:ul.bar {:class (if (:running? state) "running" "stoppped")}
+   [:li {:on-click task-toggle} "tog"]
+   [:li {:on-click task-stop}   "stop"]
+   [:li {:on-click (fn [_] (play-audio {:url "audio/cash.mp3" :dur .5}))}  "cash"]
+   [:li {:on-click (fn [_] (play-audio {:url "audio/buzzer.mp3" :dur .5}))} "buz"]
+  ]
+  [:p.time (.toFixed (/ (- (:time-cur state) (:time-flip state)) 1000) 1)]
+  [:p.score "trial: " (:trial state)]
+  [:p.score "score: " (:score state)]
+  [:p.score "cards: " (str (:cards-cur state))]]))
 
 (defn task-display
   "html to render for display. updates for any change in display
    "
   [{:keys [cards-cur event-name score] :as state}]
-
   (let [f (:func (event-name EVENTDISPATCH))]
    (sab/html
     [:div.board
-     {:onKeyPress (fn [e] (keypress e @STATE))}
-     [:h1.score (str "SCORE: " score)]
-     [:h3.run "running? " (str (:running? state))]
-     (if f (f state))
-     ; lookup what todo for this state
-     [:p.time {:style {:size "smaller"}} "time: " (:time-cur state)]
-])))
+     (show-debug state) ; todo, hide behind (when DEBUG)
+     (if f (f state))])))
 
 
 (let [node (.getElementById js/document "task")]
