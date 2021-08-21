@@ -8,7 +8,8 @@
    [cljs-bach.synthesis :as snd]
    [sablono.core :as sab :include-macros true]
    [cljs.core.async :refer [<! chan sliding-buffer put! close! timeout]])
-  (:require-macros  [cljs.core.async.macros :refer [go-loop go]]))
+  (:require-macros  [cljs.core.async.macros :refer [go-loop go]])
+  (:import [goog.events EventType KeyHandler]))
 (enable-console-print!)
 (set! *warn-on-infer* false) ; maybe want to be true
 
@@ -16,11 +17,13 @@
 ;; Left high prob win, Right low prob win, Middle always win (but require multiple pushes)
 ;; 3 stages: 80/20/100, 20/80/100, 100/100/100 (habit test)
 
+
+(def event-states [:instruction :card :feeback]) ; unused
 (defonce CARDDUR 1500)
 (defonce SIDES [:left :middle :right])
-(defonce KEYS {:left ["f"] ;; 70
-               :middle ["g", "h"] ;; 71 72
-               :right ["j"] ;; 74
+(defonce KEYS {:left [70 37] ;["f"] ; left arrow
+               :middle [71 72 40] ; ["g", "h"]  ; down arrow
+               :right [74 29] ;["j"] ; right arrow
                :next [32] ;; space
                })
 (defonce CARDPUSHES {:left 1 :right 1 :middle 3})
@@ -32,6 +35,7 @@
   :p100100 {:left 100 :middle 100 :right 100 :rep 3}})
 
 (defonce CARDIMGS (zipmap SIDES (take 3 (shuffle ["✿", "❖", "✢", "⚶", "⚙", "✾"]))))
+
 
 ;; how to handle each event
 (defn cards-disp
@@ -56,6 +60,16 @@
   (let [o {:left 1 :middle 2 :right 3}]
     (sort-by #((:side %) o) map-with-side)))
 
+(defn mkcard
+  "various lookups to create a card map. TODO: use record?
+   side is :left :middle :right. prob is 0-100"
+  [side prob]
+  {:side side :prob prob
+   :push-seen 0
+   :push-need (side CARDPUSHES)
+   :keys (side KEYS)
+   :img (side CARDIMGS)})
+
 (defn mkblock
   "all combinations. kludey sort+distinct to remove repeated permutations
    wants map with probs and reps like {:left 20 :right 80 :middle 100 :rep 3}"
@@ -63,16 +77,28 @@
   (let [trials (distinct (for [s1 SIDES s2 SIDES
                      :when (not= s1 s2)]
                  (sort-side (list
-                             {:side s1 :prob (s1 block) :npush (s1 CARDPUSHES)}
-                             {:side s2 :prob (s2 block) :npush (s2 CARDPUSHES)}))))]
+                             (mkcard s1 (s1 block))
+                             (mkcard s2 (s2 block))))))]
     (shuffle (apply concat (repeat (:rep block) trials)))))
 
 (defn cardseq "" [p3_and_rep]
   ; [{:left 80 :middle 100 :right 20 :rep 3}]
+  ; TODO: add stage to each group
   (apply concat (for [b p3_and_rep] (mkblock b))))
 
+(def CARDSLIST (cardseq (vals SCHEME)))
 
-(def event-states [:instruction :card :feeback]) ; unused
+
+(defn cards-at-trial
+  "rearrange from vect to map. depends on CARDSLIST
+  ({card1} {card2}) to {:left {card1} :middle nil :right {card2}"
+  [trial]
+  (let [empty {:left nil :middle nil :right nil}
+        cur-cards (nth CARDSLIST trial)
+        sidemap (map (fn [c] {(:side c) (dissoc c :side)}) cur-cards) ] 
+    (merge empty (reduce merge sidemap))))
+
+
 ;; audo
 (defonce audio-context (snd/audio-context))
 (def SOUNDS {:reward [{:url "audio/cash.mp3"    :dur .5}
@@ -98,10 +124,12 @@
                      :time-start 0
                      :time-cur 0
                      :time-delta 0
-                     :time-flip 0
+                     :time-flip 0      ; animation time
+                     :time-flip-abs 0  ; epoch time
 
                      :cards-cur []
-                     :cards-list [] ; [ [{card1}, {card2}], [], ... ]
+                     ; this probably doesn't have to travel around with the state
+                     ; once shuffled, it'll never change
 
                      :trial 0
                      :responses [] ; {:side :rt :score :prob :keys [{:time :kp $k}]}
@@ -116,7 +144,6 @@
  [_ time]
   (-> starting-state
       (assoc :time-start time :time-cur time :time-flip time
-             :cards-list (cardseq (vals SCHEME))
              :running? true)))
 
 (defn task-next-trial [state]
@@ -124,7 +151,7 @@
   (let [trial (:trial state) next-trial (inc trial)]
     (assoc state
            :trial next-trial
-           :cards-cur (nth (:cards-list state) trial))))
+           :cards-cur (cards-at-trial trial))))
 
 (defn event-next?
   "based on current event and time-delta, do we need to update?
@@ -139,7 +166,8 @@
       (assoc
        (if (= next :card) (task-next-trial state) state)
        :event-name next
-       :time-flip time)
+       :time-flip time
+       :time-flip-abs (.getTime (js/Date.)))
       state)))
 
 (defn time-update
@@ -186,9 +214,34 @@
              (assoc :running? false))))
 
 
-(defn keypress [e state]
-  (println e)
-  (.preventDefault e))
+(defn cards-pushed-side
+  "is a pushed key for any card in current state?"
+  [pushed cards-cur]
+  (first (mapcat
+   (fn [side] (keep #(if (= pushed %) side nil)
+                   (-> cards-cur side :keys)))
+   SIDES)))
+
+(defn mkresp []
+  ;{:side :score :prob :keys [{:side :rt :key :time}]}
+)
+(defn keypress [state e]
+  (let [pushed (.. e -keyCode)
+        cards-cur (:cards-cur state)
+        side (cards-pushed-side pushed cards-cur)]
+  (when (not (nil? side))
+     (-> state
+         (update-in [:cards-cur side :pushes] inc)
+         (update-in :push-finished
+            #(if (>= (-> state :cards-cur :side :push-seen)
+                     (-> cards-cur :push-need))
+                 true
+                 %))))
+         
+  
+  ;(.preventDefault e)
+))
+
 (defn show-debug "debug info. displayed on top of task"
 [state]
 (sab/html
@@ -236,3 +289,11 @@
 
 (reset! STATE @STATE) ; why?
 (task-start)
+
+;(let [kh (KeyHandler. js/window)]
+;  (gev/listen kh (-> KeyHandler .-EventType .-Key) (partial keypress @STATE)))
+
+
+(gev/listen (KeyHandler. js/document)
+            (-> KeyHandler .-EventType .-KEY) ; "key", not same across browsers?
+            (partial keypress @STATE))
