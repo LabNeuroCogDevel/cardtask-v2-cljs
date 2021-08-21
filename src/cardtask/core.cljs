@@ -17,13 +17,19 @@
 ;; Left high prob win, Right low prob win, Middle always win (but require multiple pushes)
 ;; 3 stages: 80/20/100, 20/80/100, 100/100/100 (habit test)
 
+(defn prob-gets-points?
+  [prob]
+  "prob is between 0 and 100. rand-int can return 0"
+  ;   0    >= 1-100
+  ;  100   >= 1-100
+  (>= prob (inc (rand-int 99))))
+
 
 (def event-states [:instruction :card :feeback]) ; unused
-(defonce CARDDUR 1500)
 (defonce SIDES [:left :middle :right])
 (defonce KEYS {:left [70 37] ;["f"] ; left arrow
                :middle [71 72 40] ; ["g", "h"]  ; down arrow
-               :right [74 29] ;["j"] ; right arrow
+               :right [74 39] ;["j"] ; right arrow
                :next [32] ;; space
                })
 (defonce CARDPUSHES {:left 1 :right 1 :middle 3})
@@ -51,7 +57,7 @@
 
 
 ;; settings for events
-(def EVENTDISPATCH {:card {:dur 1500 :func #'cards-disp :next :feedback}
+(def EVENTDISPATCH {:card     {:dur 1500 :func #'cards-disp :next :feedback}
                     :feedback {:dur 1500 :func #'feedback-disp :next :card}})
 
 (defn sort-side
@@ -93,7 +99,7 @@
   "rearrange from vect to map. depends on CARDSLIST
   ({card1} {card2}) to {:left {card1} :middle nil :right {card2}"
   [trial]
-  (let [empty {:left nil :middle nil :right nil}
+  (let [empty {:left nil :middle nil :right nil :picked nil}
         cur-cards (nth CARDSLIST trial)
         sidemap (map (fn [c] {(:side c) (dissoc c :side)}) cur-cards) ] 
     (merge empty (reduce merge sidemap))))
@@ -119,6 +125,7 @@
    dur))
 
 ;; from flappy bird demo
+(def start-response {:rt nil :side nil :get-points 0 :keys []})
 (def starting-state {:running? false
                      :event-name :card ; :instruction :card :feedback
                      :time-start 0
@@ -134,6 +141,8 @@
                      :trial 0
                      :responses [] ; {:side :rt :score :prob :keys [{:time :kp $k}]}
                      :score 0})
+; was defonce but happy to reset when resourced
+(def STATE (atom starting-state))
 
 (defn state-fresh
   "starting fresh. use starting-state but
@@ -144,10 +153,13 @@
  [_ time]
   (-> starting-state
       (assoc :time-start time :time-cur time :time-flip time
-             :running? true)))
+             :running? true
+             :responses (vec (repeat (count CARDSLIST) starting-response)))))
 
-(defn task-next-trial [state]
+
+(defn task-next-trial
   "update trial. get new card. NB. nth is 0 based. trial is not(?)"
+  [state]
   (let [trial (:trial state) next-trial (inc trial)]
     (assoc state
            :trial next-trial
@@ -155,7 +167,8 @@
 
 (defn event-next?
   "based on current event and time-delta, do we need to update?
-   returns updated state"
+   returns updated state: trial, event name, and flip time
+   task-next-trial also updates cards and trial"
   [state time]
   (let [cur (:time-cur state)
         last (:time-flip state)
@@ -180,8 +193,6 @@
      ;additional updates to state
 ))
 
-; was defonce but happy to reset when resourced
-(def STATE (atom starting-state))
 
 
 (defn run-loop [time]
@@ -222,25 +233,72 @@
                    (-> cards-cur side :keys)))
    SIDES)))
 
-(defn mkresp []
-  ;{:side :score :prob :keys [{:side :rt :key :time}]}
-)
-(defn keypress [state e]
+(defn key-resp
+  "generate response map. to be appended to (-> state :responses n :keys)"
+  [fliptime side pushed]
+  (let [time (.getTime (js/Date.))
+        rt (- time fliptime)]
+  {:side side :key pushed :rt rt :time time}))
+
+(defn response-score
+  "when a side has been picked, update w/side rt prob and points
+  scoring (w/prob) happens here!"
+  [response picked prob]
+  ; skip update if picked (keypush) is nill
+  ; or if we already have a response
+  (if (or (nil? picked) (not (nil? (:side response))))
+    response
+    (assoc response
+           :side picked
+           :rt  (-> response :keys last :rt)
+           :prob  prob
+           :get-points (prob-gets-points? prob))))
+
+(defn cards-cur-picked
+  "check counts and pick a card
+  update :picked in {:left {..}, ..., :picked nil}"
+  [cards-cur side]
+  (let [already-picked (:picked cards-cur)
+        seen (-> cards-cur side :push-seen)
+        need (-> cards-cur side :push-need)]
+  ;(println "should pick?" side seen need)
+    (if (and (>= seen need) (nil? already-picked))
+      (assoc cards-cur :picked  side)
+      cards-cur)))
+
+
+(defn state-add-response
+  "modify state with a given keypress
+  * cards-cur gets updated push inside side, might also set picked
+  * update response @ trial index
+  expects to be used to (reset!) somewhere else"
+  [state pushed side]
+  (let [trialidx0 (dec (:trial state))
+        card-prob (-> state :cards-cur side :prob)]
+    (-> state
+        ; ephemeral push count and ":picked" when n.pushs > need
+        ; will be lost when trial changes
+        (update-in [:cards-cur side :push-seen] inc)
+        (update-in [:cards-cur] #(cards-cur-picked % side))
+        ; append to responses using index. will stick around
+        ; first add just the keypress
+        ; then check to see if we should score it
+        (update-in [:responses trialidx0 :keys]
+                   conj
+                   (key-resp (:time-flip-abs state) side pushed))
+        (update-in [:responses trialidx0] #(response-score % side card-prob)))))
+
+(defn keypress! [state-atom e]
   (let [pushed (.. e -keyCode)
-        cards-cur (:cards-cur state)
+        cards-cur (:cards-cur @state-atom)
         side (cards-pushed-side pushed cards-cur)]
   (when (not (nil? side))
-     (-> state
-         (update-in [:cards-cur side :pushes] inc)
-         (update-in :push-finished
-            #(if (>= (-> state :cards-cur :side :push-seen)
-                     (-> cards-cur :push-need))
-                 true
-                 %))))
+     (println "side keypush!" pushed side)
+     (reset! state-atom (state-add-response @state-atom pushed side))
+     ;(println "staet" @state-atom)
+     (.preventDefault e))))
          
-  
-  ;(.preventDefault e)
-))
+
 
 (defn show-debug "debug info. displayed on top of task"
 [state]
@@ -251,11 +309,17 @@
    [:li {:on-click task-stop}   "stop"]
    [:li {:on-click (fn [_] (play-audio {:url "audio/cash.mp3" :dur .5}))}  "cash"]
    [:li {:on-click (fn [_] (play-audio {:url "audio/buzzer.mp3" :dur .5}))} "buz"]
+   [:li {:on-click (fn [_] (renderer (world @STATE)))} "update-debug"]
   ]
   [:p.time (.toFixed (/ (- (:time-cur state) (:time-flip state)) 1000) 1)]
   [:p.score "trial: " (:trial state)]
   [:p.score "score: " (:score state)]
-  [:p.score "cards: " (str (:cards-cur state))]]))
+  [:br]
+  [:p.score "cards: " (str (:cards-cur state))]
+  [:br]
+  [:p.resp "nresp: " (-> state :responses count)]
+  [:br]
+  [:p.resp "resp: " (str (get-in state [:responses (dec (:trial state))]))]]))
 
 (defn task-display
   "html to render for display. updates for any change in display
@@ -281,19 +345,18 @@
 
 (defn world
   "function for anything used to wrap state.
-   currelty doesn't do anything. could score. phone home. etc"
+   currelty doesn't do anything. could phone home, etc
+   changes to state here do not get saved/updated with (reset!)"
   [state]
   (-> state))
 
 (add-watch STATE :renderer (fn [_ _ _ n] (renderer (world n))))
 
-(reset! STATE @STATE) ; why?
+; TODO: this should go into state-fresh?
+(reset! STATE  @STATE) ; why ?
 (task-start)
-
-;(let [kh (KeyHandler. js/window)]
-;  (gev/listen kh (-> KeyHandler .-EventType .-Key) (partial keypress @STATE)))
 
 
 (gev/listen (KeyHandler. js/document)
             (-> KeyHandler .-EventType .-KEY) ; "key", not same across browsers?
-            (partial keypress @STATE))
+            (partial keypress! STATE))
