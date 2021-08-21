@@ -1,2 +1,4 @@
-{:main cardtask.core}
+^{:watch-dirs ["src" "test"]
+  :extra-main-files {:tests {:main hello-world.core-tests}}}
+{:main cardtask.core :optimizations :none}
 ;{:main cardtask.core :optimizations :none :infer-externs true}
