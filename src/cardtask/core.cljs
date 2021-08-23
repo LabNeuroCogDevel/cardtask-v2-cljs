@@ -53,7 +53,7 @@
   [:div.card {:class [(name side)]} img]))
 (defn cards-disp-side
   [side cards-cur]
-  "show card or empyt div"
+  "show card or empty div"
   (sab/html [:div.card-container
              (if-let [card-info (side cards-cur)]
                (cards-disp-one side card-info)
@@ -67,12 +67,18 @@
              ;[:h3 "yo"]])))
              (for [s SIDES] (cards-disp-side s cards-cur))]))
 
-(defn feedback-disp [state]
-  (sab/html [:h1 "FEEDBACK"]))
+(defn feedback-disp
+  [{:keys [:get-points :score]} as state]
+  "feedback: win or not?"
+  (sab/html
+   [:div.feedbak
+    (if get-points (sab/html [:h1 "Win!"])
+        (sab/html [:h1 "no points!"]))
+    [:h3.score score]]))
 
 
 ;; settings for events
-(def EVENTDISPATCH {:card     {:dur 1500 :func #'cards-disp :next :feedback}
+(def EVENTDISPATCH {:card     {:dur 9000 :func #'cards-disp :next :feedback}
                     :feedback {:dur 1500 :func #'feedback-disp :next :card}})
 
 (defn sort-side
@@ -123,11 +129,13 @@
 ;; audo
 (defonce audio-context (snd/audio-context))
 (def SOUNDS {:reward [{:url "audio/cash.mp3"    :dur .5}
-                      {:url "audio/cheer.mp3"   :dur .5}
-                      {:url "audio/trumpet.mp3" :dur .5}]
+                      ;{:url "audio/cheer.mp3"   :dur .5}
+                      ;{:url "audio/trumpet.mp3" :dur .5}
+                     ]
              :empty  [{:url "audio/buzzer.mp3"  :dur .5}
-                      {:url "audio/cry.mp3"     :dur .5}
-                      {:url "audio/alarm.mp3"   :dur .5}]})
+                      ;{:url "audio/cry.mp3"     :dur .5}
+                      ;{:url "audio/alarm.mp3"   :dur .5}
+                      ]})
 ; preload
 (for [url (map #(:url %) (-> SOUNDS :reward))] snd/sample)
 ; NB. could use e.g. (snd/square 440) for beeeeep
@@ -158,20 +166,6 @@
                      :score 0})
 ; was defonce but happy to reset when resourced
 (def STATE (atom starting-state))
-
-(defn state-fresh
-  "starting fresh. use starting-state but
-  * update all the time vars
-  * make a new sequence of cards
-  * set running? to true. TODO: maybe this happens elsewhere
-  NB. @STATE needs to be passed in so its updates are global?!"
- [_ time]
-  (-> starting-state
-      (assoc :time-start time :time-cur time :time-flip time
-             :running? true
-             :responses (vec (repeat (count CARDSLIST) starting-response)))))
-
-
 (defn task-next-trial
   "update trial. get new card. NB. nth is 0 based. trial is not(?)"
   [state]
@@ -183,6 +177,21 @@
         ;; NB. trial is prev. but b/c indexing is zero based. 
         ;;     responses@trial refers to current.
         (update-in [:responses trial :choices] #(:cur-cards %)))))
+
+(defn state-fresh
+  "starting fresh. use starting-state but
+  * update all the time vars
+  * make a new sequence of cards
+  * set running? to true. TODO: maybe this happens elsewhere
+  NB. @STATE needs to be passed in so its updates are global?!"
+ [_ time]
+  (-> starting-state
+      (assoc :time-start time :time-cur time :time-flip time
+             :running? true
+             :responses (vec (repeat (count CARDSLIST) starting-response)))
+      (task-next-trial)))
+
+
 
 (defn event-next?
   "based on current event and time-delta, do we need to update?
@@ -196,7 +205,7 @@
         dispatch (event-name EVENTDISPATCH)
         dur (:dur dispatch)
         next (:next dispatch)
-        responded? (and (= (:card event-name))
+        responded? (and (= :card event-name)
                         (not (nil? responsed-side)))]
     (if (or (> (- cur last) dur) responded?)
       (assoc
