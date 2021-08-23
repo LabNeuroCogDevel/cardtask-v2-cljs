@@ -69,12 +69,13 @@
              (for [s SIDES] (cards-disp-side s cards-cur))]))
 
 (defn feedback-disp
-  [{:keys [:get-points :score]} as state]
+  [{:keys [:trial-last-win :trial :score]} as state]
   "feedback: win or not?"
   (sab/html
    [:div.feedbak
-    (if get-points (sab/html [:h1 "Win!"])
-        (sab/html [:h1 "no points!"]))
+    (if (= trial-last-win trial)
+      (sab/html [:h1 "Win!"])
+      (sab/html [:h1 "No points!"]))
     [:h3.score score]]))
 
 
@@ -159,7 +160,7 @@
 
 
 ;; from flappy bird demo
-(def starting-response {:rt nil :side nil :get-points 0 :keys []})
+(def starting-response {:rt nil :side nil :get-points false :keys []})
 (def starting-state {:running? false
                      :event-name :card ; :instruction :card :feedback
                      :time-start 0
@@ -173,6 +174,7 @@
                      ; once shuffled, it'll never change
 
                      :trial 0
+                     :trial-last-win -1
                      :responses [] ; {:side :rt :score :prob :keys [{:time :kp $k}]}
                      :score 0})
 ; was defonce but happy to reset when resourced
@@ -295,7 +297,7 @@
            :side picked
            :rt  (-> response :keys last :rt)
            :prob  prob
-           :get-points  (score-with-sound prob))))
+           :get-points (score-with-sound prob))))
 
 (defn cards-cur-picked
   "check counts and pick a card
@@ -310,11 +312,13 @@
       cards-cur)))
 
 (defn update-score
-  [state]
-  (let [win? (-> state :responses :get-points)]
-    (println "did we win? " win?)
+  [{:keys [:responses :trial] :as state}]
+  "update score and bring get-points into top level as :trial-last-win"
+  (let [win? (get-in responses [ (dec trial) :get-points])]
     (if win?
-      (update-in state [:score] inc)
+      (-> state
+          (update-in [:score] inc)
+          (assoc :trial-last-win trial))
       state)))
 
 (defn state-add-response
