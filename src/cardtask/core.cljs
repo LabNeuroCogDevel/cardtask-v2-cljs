@@ -34,7 +34,7 @@
                :right [74 39] ;["j"] ; right arrow
                :next [32] ;; space
                })
-(defonce CARDPUSHES {:left 1 :right 1 :middle 3})
+(defonce CARDPUSHES {:left 1 :middle 3 :right 1})
 
 ;; TODO: counterbalence. switch element 1 and 2
 (defonce SCHEME
@@ -214,7 +214,7 @@
   (let [cur (:time-cur state)
         last (:time-flip state)
         event-name (:event-name state)
-        responsed-side (get-in state [:responses (dec (:trial state)) :side])
+        responsed-side (get-in state [:cards-cur :picked])
         dispatch (event-name EVENTDISPATCH)
         dur (:dur dispatch)
         next (:next dispatch)
@@ -289,8 +289,7 @@
   "when a side has been picked, update w/side rt prob and points
   scoring (w/prob) happens here!"
   [response picked prob]
-  ; skip update if picked (keypush) is nill
-  ; or if we already have a response
+  ; skip update if not enough pushes or already assigned (no undos)
   (if (or (nil? picked) (not (nil? (:side response))))
     response
     (assoc response
@@ -350,7 +349,7 @@
         event-name (:event-name @state-atom)
         side (cards-pushed-side pushed cards-cur)]
   (when (and (not (nil? side)) (not(= event-name :feedback))) ;no keys on feedback
-     (println "side keypush!" pushed side)
+     ;(println "side keypush!" pushed side)
      (reset! state-atom (state-add-response @state-atom pushed side))
      ;(println "staet" @state-atom)
      (.preventDefault e))))
