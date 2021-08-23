@@ -3,11 +3,18 @@
         cljs-bach/cljs-bach {:mvn/version "0.3.0"}
         cljsjs/react-dom {:mvn/version "15.3.1-0"}        ;; for sablono
         cljsjs/react {:mvn/version "15.3.1-0"}            ;; for sablono
-        sablono/sablono {:mvn/version "0.7.5"}}
+        sablono/sablono {:mvn/version "0.7.5"}
+        philoskim/debux-stubs {:mvn/version "0.8.1"}
+}
  :paths ["resources" "src" "target"]
  :aliases {:fig {:extra-deps
                  {com.bhauman/rebel-readline-cljs {:mvn/version "0.1.4"}
                   com.bhauman/figwheel-main {:mvn/version "0.2.3"}
-                  com.bhauman/cljs-test-display {:mvn/version "0.1.1"}}
+                  com.bhauman/cljs-test-display {:mvn/version "0.1.1"}
+                  philoskim/debux {:mvn/version "0.8.1"}
+                  clj-commons/pomegranate {:mvn/version "1.2.1"}
+                  }
                  :extra-paths ["target" "test"]}}
  :build {:main-opts ["-m" "figwheel.main" "-b" "dev" "-r"]}}
+
+; clj -M --main cljs.main --compile cardtask.core
