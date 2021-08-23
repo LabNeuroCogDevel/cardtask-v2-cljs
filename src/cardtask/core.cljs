@@ -1,6 +1,7 @@
 (ns cardtask.core
   (:require
    [cljs.spec.alpha :as s]
+   [goog.string :refer [unescapeEntities]]
    [goog.events.KeyCodes :as keycodes]
    [goog.events :as gev]
    [cljsjs.react]
@@ -44,13 +45,27 @@
 
 
 ;; how to handle each event
+(defn cards-empty [side] (sab/html [:div.card {:class (name side)} (unescapeEntities "&nbsp;")]))
+(defn cards-disp-one
+ [side {:keys [:img :push-seen] :as card}]
+ "show only this card."
+ (sab/html 
+  [:div.card {:class [(name side)]} img]))
+(defn cards-disp-side
+  [side cards-cur]
+  "show card or empyt div"
+  (sab/html [:div.card-container
+             (if-let [card-info (side cards-cur)]
+               (cards-disp-one side card-info)
+               (cards-empty side))]))
+
+
 (defn cards-disp
  "display cards. using states current card"
- [{:keys [cards-cur time-cur time-flip]}]
-  (sab/html [:div.cards
-   [:h1 "CARDS"]
-   [:h2 "new3"]
-]))
+  [{:keys [cards-cur time-cur time-flip]}]
+  (sab/html [:div.allcards
+             ;[:h3 "yo"]])))
+             (for [s SIDES] (cards-disp-side s cards-cur))]))
 
 (defn feedback-disp [state]
   (sab/html [:h1 "FEEDBACK"]))
@@ -125,7 +140,7 @@
    dur))
 
 ;; from flappy bird demo
-(def start-response {:rt nil :side nil :get-points 0 :keys []})
+(def starting-response {:rt nil :side nil :get-points 0 :keys []})
 (def starting-state {:running? false
                      :event-name :card ; :instruction :card :feedback
                      :time-start 0
@@ -161,9 +176,13 @@
   "update trial. get new card. NB. nth is 0 based. trial is not(?)"
   [state]
   (let [trial (:trial state) next-trial (inc trial)]
-    (assoc state
+    (-> state
+        (assoc 
            :trial next-trial
-           :cards-cur (cards-at-trial trial))))
+           :cards-cur (cards-at-trial trial))
+        ;; NB. trial is prev. but b/c indexing is zero based. 
+        ;;     responses@trial refers to current.
+        (update-in [:responses trial :choices] #(:cur-cards %)))))
 
 (defn event-next?
   "based on current event and time-delta, do we need to update?
@@ -172,10 +191,14 @@
   [state time]
   (let [cur (:time-cur state)
         last (:time-flip state)
-        dispatch (-> state :event-name EVENTDISPATCH)
+        event-name (:event-name state)
+        responsed-side (get-in state [:responses (dec (:trial state)) :side])
+        dispatch (event-name EVENTDISPATCH)
         dur (:dur dispatch)
-        next (:next dispatch)]
-    (if (> (- cur last) dur)
+        next (:next dispatch)
+        responded? (and (= (:card event-name))
+                        (not (nil? responsed-side)))]
+    (if (or (> (- cur last) dur) responded?)
       (assoc
        (if (= next :card) (task-next-trial state) state)
        :event-name next
@@ -252,7 +275,7 @@
            :side picked
            :rt  (-> response :keys last :rt)
            :prob  prob
-           :get-points (prob-gets-points? prob))))
+           :get-points  (prob-gets-points? prob))))
 
 (defn cards-cur-picked
   "check counts and pick a card
@@ -266,6 +289,13 @@
       (assoc cards-cur :picked  side)
       cards-cur)))
 
+(defn update-score
+  [state]
+  (let [win? (-> state :responses :get-points)]
+    (println "did we win? " win?)
+    (if win?
+      (update-in state [:score] inc)
+      state)))
 
 (defn state-add-response
   "modify state with a given keypress
@@ -275,6 +305,7 @@
   [state pushed side]
   (let [trialidx0 (dec (:trial state))
         card-prob (-> state :cards-cur side :prob)]
+    ;(println "adding response w/" pushed " " side)
     (-> state
         ; ephemeral push count and ":picked" when n.pushs > need
         ; will be lost when trial changes
@@ -286,13 +317,15 @@
         (update-in [:responses trialidx0 :keys]
                    conj
                    (key-resp (:time-flip-abs state) side pushed))
-        (update-in [:responses trialidx0] #(response-score % side card-prob)))))
+        (update-in [:responses trialidx0] #(response-score % side card-prob))
+        (update-score))))
 
 (defn keypress! [state-atom e]
   (let [pushed (.. e -keyCode)
         cards-cur (:cards-cur @state-atom)
+        event-name (:event-name @state-atom)
         side (cards-pushed-side pushed cards-cur)]
-  (when (not (nil? side))
+  (when (and (not (nil? side)) (not(= event-name :feedback))) ;no keys on feedback
      (println "side keypush!" pushed side)
      (reset! state-atom (state-add-response @state-atom pushed side))
      ;(println "staet" @state-atom)
