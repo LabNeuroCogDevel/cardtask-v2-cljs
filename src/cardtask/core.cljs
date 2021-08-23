@@ -147,6 +147,16 @@
    (snd/current-time audio-context)
    dur))
 
+(defn score-with-sound
+  [prob]
+  "score and play sound. returns true (win) or false (no win)"
+  (let [get-points (prob-gets-points? prob)
+        rew-key  (if get-points :reward :empty)
+        snd (first (shuffle (rew-key SOUNDS)))]
+  (play-audio snd)
+  get-points))
+
+
 ;; from flappy bird demo
 (def starting-response {:rt nil :side nil :get-points 0 :keys []})
 (def starting-state {:running? false
@@ -284,7 +294,7 @@
            :side picked
            :rt  (-> response :keys last :rt)
            :prob  prob
-           :get-points  (prob-gets-points? prob))))
+           :get-points  (score-with-sound prob))))
 
 (defn cards-cur-picked
   "check counts and pick a card
