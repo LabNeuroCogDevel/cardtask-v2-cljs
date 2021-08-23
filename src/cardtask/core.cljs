@@ -170,13 +170,17 @@
                      :time-flip-abs 0  ; epoch time
 
                      :cards-cur []
-                     ; this probably doesn't have to travel around with the state
-                     ; once shuffled, it'll never change
+                     ;; this probably doesn't have to travel around with the state
+                     ;; once shuffled, it'll never change
 
                      :trial 0
                      :trial-last-win -1
                      :responses [] ; {:side :rt :score :prob :keys [{:time :kp $k}]}
-                     :score 0})
+                     :score 0
+
+                      ;; debugging
+                     :no-debug-bar true
+})
 ; was defonce but happy to reset when resourced
 (def STATE (atom starting-state))
 (defn task-next-trial
@@ -327,20 +331,22 @@
   expects to be used to (reset!) somewhere else"
   [state pushed side]
   (let [trialidx0 (dec (:trial state))
-        card-prob (-> state :cards-cur side :prob)]
-    ;(println "adding response w/" pushed " " side)
-    (-> state
-        ; ephemeral push count and ":picked" when n.pushs > need
-        ; will be lost when trial changes
-        (update-in [:cards-cur side :push-seen] inc)
-        (update-in [:cards-cur] #(cards-cur-picked % side))
-        ; append to responses using index. will stick around
-        ; first add just the keypress
-        ; then check to see if we should score it
-        (update-in [:responses trialidx0 :keys]
-                   conj
-                   (key-resp (:time-flip-abs state) side pushed))
-        (update-in [:responses trialidx0] #(response-score % side card-prob))
+        card-prob (-> state :cards-cur side :prob)
+        next-state (-> state
+                   ; ephemeral push count and ":picked" when n.pushs > need
+                   ; will be lost when trial changes
+                       (update-in [:cards-cur side :push-seen] inc)
+                       (update-in [:cards-cur] #(cards-cur-picked % side))
+                       ; append to responses using index. will stick around
+                       ; first add just the keypress
+                       ; then check to see if we should score it
+                       (update-in [:responses trialidx0 :keys]
+                                  conj
+                                  (key-resp (:time-flip-abs state) side pushed)))
+        picked-side (get-in next-state [:cards-cur :picked])]
+
+    (-> next-state
+        (update-in [:responses trialidx0] #(response-score % picked-side card-prob))
         (update-score))))
 
 (defn keypress! [state-atom e]
