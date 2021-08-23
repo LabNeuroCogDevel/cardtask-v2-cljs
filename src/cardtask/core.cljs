@@ -361,17 +361,23 @@
    [:li {:on-click task-stop}   "stop"]
    [:li {:on-click (fn [_] (play-audio {:url "audio/cash.mp3" :dur .5}))}  "cash"]
    [:li {:on-click (fn [_] (play-audio {:url "audio/buzzer.mp3" :dur .5}))} "buz"]
-   [:li {:on-click (fn [_] (renderer (world @STATE)))} "update-debug"]
+   [:li {:on-click (fn [_] (renderer (world state)))} "update-debug"]
+   [:li {:on-click
+         (fn [_] (reset! STATE (update-in @STATE [:no-debug-bar] not)))}
+        "debug-bar"]
   ]
-  [:p.time (.toFixed (/ (- (:time-cur state) (:time-flip state)) 1000) 1)]
-  [:p.score "trial: " (:trial state)]
-  [:p.score "score: " (:score state)]
-  [:br]
-  [:p.score "cards: " (str (:cards-cur state))]
-  [:br]
-  [:p.resp "nresp: " (-> state :responses count)]
-  [:br]
-  [:p.resp "resp: " (str (get-in state [:responses (dec (:trial state))]))]]))
+  ; double negative so default is true without explicity settings
+  (when (not (:no-debug-bar state))
+    (sab/html [:div.debug-extra-info
+     [:p.time (.toFixed (/ (- (:time-cur state) (:time-flip state)) 1000) 1)]
+     [:p.score "trial: " (:trial state)]
+     [:p.score "score: " (:score state)]
+     [:br]
+     [:p.score "cards: " (str (:cards-cur state))]
+     [:br]
+     [:p.resp "nresp: " (-> state :responses count)]
+     [:br]
+     [:p.resp "resp: " (str (get-in state [:responses (dec (:trial state))]))]]))]))
 
 (defn task-display
   "html to render for display. updates for any change in display
