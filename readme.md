@@ -11,3 +11,8 @@ initial project looks like
 
 ## edit
 emacs with cider (`cider-jack-in-cljs`)
+
+## static pages
+symlinked
+ * out -> docs (can point gh pages there)
+ * audio and style from resources/public/ into out
