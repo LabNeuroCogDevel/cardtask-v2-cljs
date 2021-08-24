@@ -27,7 +27,7 @@
   (>= prob (inc (rand-int 99))))
 
 
-(def event-states [:instruction :card :feeback]) ; unused
+(def event-states [:instruction :start :card :feeback :done]) ; unused
 (defonce SIDES [:left :middle :right])
 (defonce KEYS {:left [70 37] ;["f"] ; left arrow
                :middle [71 72 40] ; ["g", "h"]  ; down arrow
@@ -228,6 +228,7 @@
 
                       ;; debugging
                      :no-debug-bar true
+                     :debug-no-advance false
 })
 ; was defonce but happy to reset when resourced
 (def STATE (atom starting-state))
@@ -283,7 +284,8 @@
         next (if finished? :last-msg (:next dispatch))
         responded? (and (= :card event-name)
                         (not (nil? responsed-side)))]
-    (if (or (> (- cur last) dur) responded?)
+    (if (and (or (> (- cur last) dur) responded?)
+             (not (:debug-no-advance state)))
       (assoc
        (case next
          :card     (task-next-trial state)
@@ -324,13 +326,19 @@
 (defn task-toggle "start and stop the timer. does not clear time" []
   (let [toggle (not (:running? @STATE))]
   (reset! STATE (assoc @STATE :running? toggle))
-  (if toggle (task-start))))
+  (when toggle
+    (task-start))))
 
 (defn task-stop "turn off the task. resets STATE/clears time" []
   (reset! STATE
          (-> @STATE
              (state-fresh 0)
-             (assoc :running? false))))
+             (assoc :running? false
+                    :no-debug-bar (:no-debug-bar STATE)))))
+
+(defn task-restart []
+  (task-stop)
+  (task-start))
 
 
 (defn cards-pushed-side
@@ -424,32 +432,31 @@
      (.preventDefault e))))
          
 
+(defn state-toggle-setting [setting] (reset! STATE (update-in @STATE setting not)))
 
 (defn show-debug "debug info. displayed on top of task"
-[state]
+[{:keys [:trial :event-name :score :time-cur :time-flip] :as state}]
 (sab/html
  [:div.debug
   [:ul.bar {:class (if (:running? state) "running" "stoppped")}
    [:li {:on-click task-toggle} "tog"]
-   [:li {:on-click task-stop}   "stop"]
+   [:li {:on-click task-restart}   "restart"]
+   [:li {:on-click (fn [_] ((task-stop) (instruction 0)))} "instructions"]
    [:li {:on-click (fn [_] (play-audio {:url "audio/cash.mp3" :dur .5}))}  "cash"]
    [:li {:on-click (fn [_] (play-audio {:url "audio/buzzer.mp3" :dur .5}))} "buz"]
    [:li {:on-click (fn [_] (renderer (world state)))} "update-debug"]
-   [:li {:on-click
-         (fn [_] (reset! STATE (update-in @STATE [:no-debug-bar] not)))}
-        "debug-bar"]
+   [:li {:on-click (fn [_] (state-toggle-setting [:no-debug-bar]))} "debug-bar"]
+   [:li {:on-click (fn [_] (state-toggle-setting [:debug-no-advance]))} "no-advance"]
   ]
   ; double negative so default is true without explicity settings
   (when (not (:no-debug-bar state))
     (sab/html [:div.debug-extra-info
-     [:p.time (.toFixed (/ (- (:time-cur state) (:time-flip state)) 1000) 1)]
-     [:p.score "trial: " (:trial state)]
-     [:p.score "score: " (:score state)]
-     [:br]
-     [:p.score "cards: " (str (:cards-cur state))]
-     [:br]
+     [:p.time (.toFixed (/ (- time-cur time-flip) 1000) 1)]
+     [:p.info (str "trial: " trial " @ " (name event-name))]
+     [:p.info "score: " score]
+     [:p.info "cards: " (str (:cards-cur state))]
+     [:p.info "no-adv: " (:debug-no-advance state) " " (:no-debug-bar state)]
      [:p.resp "nresp: " (-> state :responses count)]
-     [:br]
      [:p.resp "resp: " (str (get-in state [:responses (dec (:trial state))]))]]))]))
 
 (defn task-display
