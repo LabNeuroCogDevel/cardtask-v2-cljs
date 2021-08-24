@@ -8,9 +8,11 @@ ul.bar li {display:inline-block; margin-right: 1em; background-color:lightblue; 
 .debug > p {display:inline-block; margin-right: .5em}
 
 
+/* color set explicitly
 .left {background-color: blue;}
 .middle {background-color: red;}
 .right {background-color: yellow;}
+*/
 
 .allcards {
    display: block;
@@ -19,6 +21,7 @@ ul.bar li {display:inline-block; margin-right: 1em; background-color:lightblue; 
    min-width: 200px;
 }
 .card-container{ display: inline-block;}
+.card-container-instuctions { display: inline-block; min-width: 420px;}
 .card {
    display: inline-flex;
    justify-content: center;

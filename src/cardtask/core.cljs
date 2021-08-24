@@ -34,16 +34,43 @@
                :right [74 39] ;["j"] ; right arrow
                :next [32] ;; space
                })
-(defonce CARDPUSHES {:left 1 :middle 3 :right 1})
 
-;; TODO: counterbalence. switch element 1 and 2
-(defonce SCHEME
- {:p8020   {:left 80  :middle 100 :right 20  :rep 3}
-  :p2080   {:left 20  :middle 100 :right 20  :rep 3}
-  :p100100 {:left 100 :middle 100 :right 100 :rep 3}})
+;; TODO: principle counterbalence?
+(def card-probs (shuffle
+                   [[80   20 100]
+                    [20   80 100]
+                    [100 100 100]]))
+(defn npush-by-prob
+  [probs]
+  "require 3 pushes if always 100% prob of correct"
+  (if (every? #(= 100 %) probs) 3 1))
+(defn card-side-zip [vals] (zipmap SIDES (take 3 (shuffle vals))))
+(defn mk-card-info []
+  (let [colors (card-side-zip ["blue", "red", "yellow", "lightgreen", "orange"])
+        imgs   (card-side-zip ["✿", "❖", "✢", "⚶", "⚙", "✾"])
+        probs  (card-side-zip [[80   20 100] [20   80 100] [100 100 100]])]
+     {:color  colors
+      :img    imgs
+      :probs  probs
+      :pushes (zipmap SIDES (map npush-by-prob (vals probs)))}))
 
-(defonce CARDIMGS (zipmap SIDES (take 3 (shuffle ["✿", "❖", "✢", "⚶", "⚙", "✾"]))))
-
+(defn mk-card-scheme
+  [cardinfo reps]
+  "scheme structure for generating a list of trials.
+  used by mk-card-list.
+  cardinfo probably from mk-card-info"
+  {:p8020   {:left   (get-in cardinfo [:probs :left   0])
+             :middle (get-in cardinfo [:probs :middle 0])
+             :right  (get-in cardinfo [:probs :right  0])
+             :rep reps}
+   :p2080   {:left   (get-in cardinfo [:probs :left   1])
+             :middle (get-in cardinfo [:probs :middle 1])
+             :right  (get-in cardinfo [:probs :right  1])
+             :rep reps}
+   :p100100 {:left   (get-in cardinfo [:probs :left   2])
+             :middle (get-in cardinfo [:probs :middle 2])
+             :right  (get-in cardinfo [:probs :right  2])
+             :rep reps}})
 
 ;; how to handle each event
 (defn cards-empty [side] (sab/html [:div.card {:class (name side)} (unescapeEntities "&nbsp;")]))
@@ -51,9 +78,10 @@
  [side {:keys [:img :push-seen :push-need] :as card}]
  "show only this card."
  (let [scale (min 2 (+ 1 (/ push-seen push-need)))]
- (sab/html 
+ (sab/html
   [:div.card {:class [(name side)]
-              :style {:transform (str "scale("scale","scale")")}}
+              :style {:background (get-in CARDINFO [:color side])
+                      :transform (str "scale("scale","scale")")}}
    img])))
 (defn cards-disp-side
   [side cards-cur]
@@ -90,25 +118,43 @@
                         :background-position sprite
                         :background-repeat "no-repeat"
                         }}])))
+(defn animate-wrong [step]
+  (let [size (* 72 (if step (- 1 step) 1))]
+    (sab/html [:div {:style {:position "absolute" :width "100%" :text-align "center"}}
+               [:span
+               {:style {:font-size (str size "px")}}
+               "🥺"]])))
+
+(defn image-small [side]
+  (let [img (get-in CARDINFO [:img side])
+       color (-> CARDINFO :color side)]
+    (sab/html [:span {:style {:background-color color}} img])))
 
 (defn feedback-disp
-  [{:keys [:trial-last-win :trial :score :time-cur :time-flip]} as state]
+  [{:keys [:trial-last-win :trial :score :time-cur :time-flip] :as state}]
   "feedback: win or not?
    using sprite that is 11 frames of 99x99"
+  (let [
+        side (-> state :cards-cur :picked)
+        dur (-> EVENTDISPATCH :feedback :dur)
+        delta (- time-cur time-flip)
+        time (mod delta dur)
+        step (/ time dur) ; 0 started to 1 finished
+        ]
   (sab/html
    [:div.feedbak
     (if (= trial-last-win trial)
-      (let [dur (-> EVENTDISPATCH :feedback :dur)
-            delta (- time-cur time-flip)
-            time (mod delta dur)
-            step (/ time dur) ; step is 30. hardcoded in animation
-            ]
-        (sab/html [:div.win
-                   [:h1 "Win!"]
-                   (animate-star step)
-                   ]))
-      (sab/html [:h1 "No points!"]))
-    [:p.score "total points: " score]]))
+      (sab/html [:div.win
+                 [:h1 [:span (image-small side) " gave you points!"]]
+                 (animate-star step)
+                 ])
+      (sab/html [:div
+                 (if (nil? side)
+                  [:h1 "Too slow! No points!"]
+                  [:p (image-small side) " gave no points!"])
+                 [:br]
+                 (animate-wrong step)]))
+    [:p.score "total points: " score]])))
 
 
 (defn finished-disp [{:keys [:score] :as state}]
@@ -148,9 +194,9 @@
   [side prob]
   {:side side :prob prob
    :push-seen 0
-   :push-need (side CARDPUSHES)
+   :push-need (get-in CARDINFO [:pushes side])
    :keys (side KEYS)
-   :img (side CARDIMGS)})
+   :img (get-in CARDINFO [:img side])})
 
 (defn mkblock
   "all combinations. kludey sort+distinct to remove repeated permutations
@@ -167,21 +213,25 @@
   ; [{:left 80 :middle 100 :right 20 :rep 3}]
   ; TODO: add stage to each group
   (apply concat (for [b p3_and_rep] (mkblock b))))
+(defn mk-card-list
+  [card-info reps]
+  (cardseq (vals (mk-card-scheme card-info reps))))
 
-(def CARDSLIST (cardseq (vals SCHEME)))
-
+(def CARDINFO (mk-card-info))
+(def CARDSLIST (mk-card-list CARDINFO 3))
 
 (defn cards-at-trial
   "rearrange from vect to map. depends on CARDSLIST
   ({card1} {card2}) to {:left {card1} :middle nil :right {card2}"
-  [trial]
+  [trial cards-list]
   (let [empty {:left nil :middle nil :right nil :picked nil}
-        cur-cards (if (state-out-of-trials? trial) nil (nth CARDSLIST trial))
-        sidemap (map (fn [c] {(:side c) (dissoc c :side)}) cur-cards) ] 
+        cur-cards (if (state-out-of-trials? trial cards-list) nil (nth cards-list trial))
+        sidemap (map (fn [c] {(:side c) (dissoc c :side)}) cur-cards) ]
     (merge empty (reduce merge sidemap))))
 
+;;; 
 
-;; audo
+;; audio
 (defonce audio-context (snd/audio-context))
 (def SOUNDS {:reward [{:url "audio/cash.mp3"    :dur .5}
                       ;{:url "audio/cheer.mp3"   :dur .5}
@@ -221,6 +271,7 @@
                      :time-delta 0
                      :time-flip 0      ; animation time
                      :time-flip-abs 0  ; epoch time
+                     :time-since 0     ; since last flip
 
                      :cards-cur []
                      ;; this probably doesn't have to travel around with the state
@@ -230,7 +281,7 @@
                      :trial-last-win -1
                      :responses [] ; {:side :rt :score :prob :keys [{:time :kp $k}]}
                      :score 0
-                     
+
                      :instruction-idx 0
 
                       ;; debugging
@@ -247,7 +298,7 @@
         next-state (-> state
                        (assoc
                         :trial next-trial
-                        :cards-cur (cards-at-trial trial)))]
+                        :cards-cur (cards-at-trial trial CARDSLIST)))]
     ;; NB. trial is soon to be prev trial
     ;; but b/c indexing is zero based,
     ;; responses@trial refers to future, soon to be current trial.
@@ -268,8 +319,8 @@
 
 
 
-(defn state-out-of-trials? [trial]
-  (>= trial (count CARDSLIST)))
+(defn state-out-of-trials? [trial cards-list]
+  (>= trial (count cards-list)))
 
 
 (defn task-wrap-up [state]
@@ -287,7 +338,7 @@
         responsed-side (get-in state [:cards-cur :picked])
         dispatch (event-name EVENTDISPATCH)
         dur (:dur dispatch)
-        finished? (and (= :feedback event-name) (state-out-of-trials? trial))
+        finished? (and (= :feedback event-name) (state-out-of-trials? trial CARDSLIST))
         next (if finished? :last-msg (:next dispatch))
         responded? (and (= :card event-name)
                         (not (nil? responsed-side)))]
@@ -309,7 +360,9 @@
    first call will be on unintialized time values"
   [time state]
   (-> state
-     (assoc :time-cur time :time-delta (- time (:start-time state)))
+     (assoc :time-cur time
+            :time-delta (- time (:start-time state))
+            :time-since (- time (:time-flip state)))
      (event-next? time)))
 
 (defn run-loop [time]
@@ -345,6 +398,8 @@
 
 (defn task-restart []
   (task-stop)
+  (def CARDINFO (mk-card-info))
+  (def CARDSLIST (mk-card-list CARDINFO 3))
   (task-start))
 
 
@@ -442,7 +497,7 @@
                "points"]
               [:button
                {:on-click (fn [_] (play-audio {:url "audio/buzzer.mp3" :dur .5}))}
-               "no points"]])   
+               "no points"]])
    (sab/html [:div [:h3 "Rules of the game"]
               [:ul [:li "Some cards are better at getting points than others"]
                [:li " Some cards require " [:b "more than one key push"]]
@@ -457,8 +512,8 @@
    (sab/html
     [:div
      [:p "Here's an example with arrow keys instead of the card symbols you'll see later"]
-    [:div.allcards 
-     [:div.card-container-instructions 
+    [:div.allcards
+     [:div.card-container-instructions
       (cards-disp-one :left   {:img "←" :push-seen 0 :push-need 10})
       (cards-disp-one :middle {:img "↓" :push-seen 0 :push-need 10})
       (cards-disp-one :right  {:img "→" :push-seen 0 :push-need 10})]]])])
@@ -466,7 +521,7 @@
 (defn instruction [inst-idx]
   (let [idx (max 0 inst-idx)
         ninstruction (count INSTRUCTIONS)]
-    
+
     (reset! STATE (assoc  @STATE :instruction-idx idx))
 
     (showme-this (if (< idx ninstruction)
@@ -522,7 +577,7 @@
 
   ;check instructions
   (when (<= trial 0) (instruction-keypress state-atom pushed))))
-         
+
 
 (defn state-toggle-setting [setting] (reset! STATE (update-in @STATE setting not)))
 
@@ -544,6 +599,7 @@
   (when (not (:no-debug-bar state))
     (sab/html [:div.debug-extra-info
      [:p.time (.toFixed (/ (- time-cur time-flip) 1000) 1)]
+     [:p.time (:time-since state)]
      [:p.info (str "trial: " trial " @ " (name event-name))]
      [:p.info "score: " score]
      [:p.info "cards: " (str (:cards-cur state))]
