@@ -48,10 +48,13 @@
 ;; how to handle each event
 (defn cards-empty [side] (sab/html [:div.card {:class (name side)} (unescapeEntities "&nbsp;")]))
 (defn cards-disp-one
- [side {:keys [:img :push-seen] :as card}]
+ [side {:keys [:img :push-seen :push-need] :as card}]
  "show only this card."
+ (let [scale (min 2 (+ 1 (/ push-seen push-need)))]
  (sab/html 
-  [:div.card {:class [(name side)]} img]))
+  [:div.card {:class [(name side)]
+              :style {:transform (str "scale("scale","scale")")}}
+   img])))
 (defn cards-disp-side
   [side cards-cur]
   "show card or empty div"
@@ -68,15 +71,44 @@
              ;[:h3 "yo"]])))
              (for [s SIDES] (cards-disp-side s cards-cur))]))
 
+(defn animate-star
+  [step]
+  "animate sprite. step is 0 to 1"
+  (let [frames 11
+        frame-size 99
+        total-size (* frames frame-size)
+        x% (* 100 step)
+        sprite (* -1 frame-size (int (mod (* step total-size) frames)))]
+    (sab/html [:div.sprite
+               {:width "97px"
+                :style {:position "absolute"
+                        :left (str x% "%")
+                                        ;:top (str x% "%")
+                        :width "99px"
+                        :height "99px"
+                        :background-image "url(img/star_spin_sprite.png)"
+                        :background-position sprite
+                        :background-repeat "no-repeat"
+                        }}])))
+
 (defn feedback-disp
-  [{:keys [:trial-last-win :trial :score]} as state]
-  "feedback: win or not?"
+  [{:keys [:trial-last-win :trial :score :time-cur :time-flip]} as state]
+  "feedback: win or not?
+   using sprite that is 11 frames of 99x99"
   (sab/html
    [:div.feedbak
     (if (= trial-last-win trial)
-      (sab/html [:h1 "Win!"])
+      (let [dur (-> EVENTDISPATCH :feedback :dur)
+            delta (- time-cur time-flip)
+            time (mod delta dur)
+            step (/ time dur) ; step is 30. hardcoded in animation
+            ]
+        (sab/html [:div.win
+                   [:h1 "Win!"]
+                   (animate-star step)
+                   ]))
       (sab/html [:h1 "No points!"]))
-    [:h3.score score]]))
+    [:p.score "total points: " score]]))
 
 
 ;; settings for events
