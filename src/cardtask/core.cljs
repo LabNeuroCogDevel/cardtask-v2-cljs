@@ -121,10 +121,15 @@
 
 ; maybe could do "Waiting for scanner trigger" here.
 ; but better as a own thing between instructions and starting?
-(defn start-disp [_] (sab/html ""))
+(defn start-disp [{:keys [:time-since :event-name] :as state}]
+  (sab/html [:p (str "Starting in ... "
+                     (-> event-name EVENTDISPATCH :dur
+                         (- time-since)
+                         (/ 1000)
+                         (.toFixed 1)) " seconds")]))
 
 ;; settings for events
-(def EVENTDISPATCH {:start    {:dur 0 :func #'start-disp :next :card}
+(def EVENTDISPATCH {:start    {:dur 2000 :func #'start-disp :next :card}
                     :card     {:dur 2000 :func #'cards-disp :next :feedback}
                     :feedback {:dur 1500 :func #'feedback-disp :next :card}
                     :last-msg {:dur 1 :func #'finished-disp :next :done}
@@ -225,6 +230,8 @@
                      :trial-last-win -1
                      :responses [] ; {:side :rt :score :prob :keys [{:time :kp $k}]}
                      :score 0
+                     
+                     :instruction-idx 0
 
                       ;; debugging
                      :no-debug-bar true
@@ -341,6 +348,11 @@
   (task-start))
 
 
+(defn any-accept-key [pushed]
+  (first (mapcat
+   (fn [keykey] (if (some #(= pushed %) (keykey KEYS)) [keykey] nil))
+   (keys KEYS))))
+
 (defn cards-pushed-side
   "is a pushed key for any card in current state?"
   [pushed cards-cur]
@@ -416,11 +428,88 @@
         (update-in [:responses trialidx0] #(response-score % picked-side card-prob))
         (update-score))))
 
+
+;;; 
+(def INSTRUCTIONS
+  [
+   (sab/html [:div [:h2 "Welcome to our card game!"]
+              [:p "The game is to get as many points as you can by choosing the better card"]
+              [:p "Push the spacebar for the next instruction"]])
+   (sab/html [:div
+              [:p "First lets test your speakers! Do you hear sounds when you push these buttons?"]
+              [:button
+               {:on-click (fn [_] (play-audio {:url "audio/cash.mp3" :dur .5}))}
+               "points"]
+              [:button
+               {:on-click (fn [_] (play-audio {:url "audio/buzzer.mp3" :dur .5}))}
+               "no points"]])   
+   (sab/html [:div [:h3 "Rules of the game"]
+              [:ul [:li "Some cards are better at getting points than others"]
+               [:li " Some cards require " [:b "more than one key push"]]
+               [:li "You'll have to learn this as you go."]
+               [:li [:b "As the game progress, some cards will change how often they give points"]]]])
+   (sab/html [:div [:p "The cards will always be in the same order"]
+              [:p "Choose a card using the arrow keys. Push"]
+              [:ul
+               [:li "Left for the left card"]
+               [:li "Down for the centercard"]
+               [:li "Right for the card on the right"]]])
+   (sab/html
+    [:div
+     [:p "Here's an example with arrow keys instead of the card symbols you'll see later"]
+    [:div.allcards 
+     [:div.card-container-instructions 
+      (cards-disp-one :left   {:img "←" :push-seen 0 :push-need 10})
+      (cards-disp-one :middle {:img "↓" :push-seen 0 :push-need 10})
+      (cards-disp-one :right  {:img "→" :push-seen 0 :push-need 10})]]])])
+
+(defn instruction [inst-idx]
+  (let [idx (max 0 inst-idx)
+        ninstruction (count INSTRUCTIONS)]
+    
+    (reset! STATE (assoc  @STATE :instruction-idx idx))
+
+    (showme-this (if (< idx ninstruction)
+                   (sab/html [:div.instructions
+                              (nth INSTRUCTIONS idx)
+                              [:br]
+                              [:button
+                               {:on-click (fn [_] (instruction (dec idx)))}
+                              "prev"]
+                              [:button
+                               {:on-click (fn [_] (instruction (inc idx)))}
+                               "next"]
+                              ])
+      (sab/html [:div
+                 [:p "Find a comfortable way to rest your fingers on the arrow keys!"]
+                 [:p "Push the space key when you're ready"]
+                 [:button {:on-click (fn [_] (task-start))}
+                  "I'm ready!"]])))))
+
+(defn instruction-keypress [state-atom key]
+  (let [iidx (:instruction-idx @state-atom)
+        ninstruction (count INSTRUCTIONS)
+        instruction-done? (>= iidx (inc ninstruction))
+        pushed (any-accept-key key)]
+  (when (and (not instruction-done?)  pushed)
+    (if (= ninstruction iidx) (task-start)
+    (case pushed
+      :next  (instruction (min ninstruction (inc iidx)))
+      (println "instuctions: have " pushed)
+      ;:left  (instruction (max 0 (dec iidx)))
+      ;:right (instruction (inc iidx))
+  )))))
+
+
+;;; 
 (defn keypress! [state-atom e]
   (let [pushed (.. e -keyCode)
         cards-cur (:cards-cur @state-atom)
+        trial (:trial @state-atom)
         event-name (:event-name @state-atom)
         side (cards-pushed-side pushed cards-cur)]
+
+
   ;no keys on feedback, start, last-msg, or done
   ; instruction doesn't use state or keypresses (but could here)
   (when (and (not (nil? side))
@@ -429,7 +518,10 @@
      ;(println "side keypush!" pushed side event-name)
      (reset! state-atom (state-add-response @state-atom pushed side))
      ;(println "staet" @state-atom)
-     (.preventDefault e))))
+     (.preventDefault e))
+
+  ;check instructions
+  (when (<= trial 0) (instruction-keypress state-atom pushed))))
          
 
 (defn state-toggle-setting [setting] (reset! STATE (update-in @STATE setting not)))
@@ -492,8 +584,10 @@
 
 ; TODO: this should go into state-fresh?
 (reset! STATE  @STATE) ; why ?
-(task-start)
 
+
+(instruction 0)
+;(task-start)
 
 (gev/listen (KeyHandler. js/document)
             (-> KeyHandler .-EventType .-KEY) ; "key", not same across browsers?
