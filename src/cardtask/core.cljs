@@ -111,9 +111,25 @@
     [:p.score "total points: " score]]))
 
 
+(defn finished-disp [{:keys [:score] :as state}]
+  ; (reset! STATE (assoc @STATE :running? false))
+  ; cannot do this here! causes recursion
+  (sab/html [:div.finished
+             [:h1.finished "Thanks for playing!"]
+             [:br]
+             [:h1.finishedPoints "You scored " score " points!"]]))
+
+; maybe could do "Waiting for scanner trigger" here.
+; but better as a own thing between instructions and starting?
+(defn start-disp [_] (sab/html ""))
+
 ;; settings for events
-(def EVENTDISPATCH {:card     {:dur 9000 :func #'cards-disp :next :feedback}
-                    :feedback {:dur 1500 :func #'feedback-disp :next :card}})
+(def EVENTDISPATCH {:start    {:dur 0 :func #'start-disp :next :card}
+                    :card     {:dur 2000 :func #'cards-disp :next :feedback}
+                    :feedback {:dur 1500 :func #'feedback-disp :next :card}
+                    :last-msg {:dur 1 :func #'finished-disp :next :done}
+                    ; repeat last-message. maybe we don't need it
+                    :done     {:dur 0 :func #'finished-disp :next :done}})
 
 (defn sort-side
   "put in order L to R order. overkill. keys are sorted themselve"
@@ -155,7 +171,7 @@
   ({card1} {card2}) to {:left {card1} :middle nil :right {card2}"
   [trial]
   (let [empty {:left nil :middle nil :right nil :picked nil}
-        cur-cards (nth CARDSLIST trial)
+        cur-cards (if (state-out-of-trials? trial) nil (nth CARDSLIST trial))
         sidemap (map (fn [c] {(:side c) (dissoc c :side)}) cur-cards) ] 
     (merge empty (reduce merge sidemap))))
 
@@ -194,7 +210,7 @@
 ;; from flappy bird demo
 (def starting-response {:rt nil :side nil :get-points false :keys []})
 (def starting-state {:running? false
-                     :event-name :card ; :instruction :card :feedback
+                     :event-name :start ; :instruction :card :feedback
                      :time-start 0
                      :time-cur 0
                      :time-delta 0
@@ -217,15 +233,17 @@
 (def STATE (atom starting-state))
 (defn task-next-trial
   "update trial. get new card. NB. nth is 0 based. trial is not(?)"
-  [state]
-  (let [trial (:trial state) next-trial (inc trial)]
-    (-> state
-        (assoc 
-           :trial next-trial
-           :cards-cur (cards-at-trial trial))
-        ;; NB. trial is prev. but b/c indexing is zero based. 
-        ;;     responses@trial refers to current.
-        (update-in [:responses trial :choices] #(:cur-cards %)))))
+  [{:keys [:trial] :as state}]
+  (println "next trial " trial)
+  (let [next-trial (inc trial)
+        next-state (-> state
+                       (assoc
+                        :trial next-trial
+                        :cards-cur (cards-at-trial trial)))]
+    ;; NB. trial is soon to be prev trial
+    ;; but b/c indexing is zero based,
+    ;; responses@trial refers to future, soon to be current trial.
+    (update-in next-state [:responses trial :choices] #(:cur-cards %))))
 
 (defn state-fresh
   "starting fresh. use starting-state but
@@ -237,44 +255,53 @@
   (-> starting-state
       (assoc :time-start time :time-cur time :time-flip time
              :running? true
-             :responses (vec (repeat (count CARDSLIST) starting-response)))
-      (task-next-trial)))
+             :responses (vec (repeat (count CARDSLIST) starting-response)))))
 
 
+
+
+(defn state-out-of-trials? [trial]
+  (>= trial (count CARDSLIST)))
+
+
+(defn task-wrap-up [state]
+  ;send state
+  (assoc state :running? false))
 
 (defn event-next?
   "based on current event and time-delta, do we need to update?
    returns updated state: trial, event name, and flip time
-   task-next-trial also updates cards and trial"
-  [state time]
-  (let [cur (:time-cur state)
-        last (:time-flip state)
-        event-name (:event-name state)
+   task-next-trial also updates cards and trial.
+   called from time-update in run-loop"
+  [{:keys [:time-cur :time-flip :event-name :trial] :as state} time-animation]
+  (let [cur time-cur
+        last time-flip
         responsed-side (get-in state [:cards-cur :picked])
         dispatch (event-name EVENTDISPATCH)
         dur (:dur dispatch)
-        next (:next dispatch)
+        finished? (and (= :feedback event-name) (state-out-of-trials? trial))
+        next (if finished? :last-msg (:next dispatch))
         responded? (and (= :card event-name)
                         (not (nil? responsed-side)))]
     (if (or (> (- cur last) dur) responded?)
       (assoc
-       (if (= next :card) (task-next-trial state) state)
+       (case next
+         :card     (task-next-trial state)
+         :done     (task-wrap-up state)
+                   state) ; :last-msg :start :feedback
        :event-name next
-       :time-flip time
+       :time-flip time-animation
        :time-flip-abs (.getTime (js/Date.)))
       state)))
 
+
 (defn time-update
-  "what to do at each timestep of AnimationFrame.
+  "what to do at each timestep of AnimationFrame (run-loop).
    first call will be on unintialized time values"
   [time state]
- (-> state
+  (-> state
      (assoc :time-cur time :time-delta (- time (:start-time state)))
-     (event-next? time)
-     ;additional updates to state
-))
-
-
+     (event-next? time)))
 
 (defn run-loop [time]
   "recursive loop to keep the task running.
@@ -386,8 +413,12 @@
         cards-cur (:cards-cur @state-atom)
         event-name (:event-name @state-atom)
         side (cards-pushed-side pushed cards-cur)]
-  (when (and (not (nil? side)) (not(= event-name :feedback))) ;no keys on feedback
-     ;(println "side keypush!" pushed side)
+  ;no keys on feedback, start, last-msg, or done
+  ; instruction doesn't use state or keypresses (but could here)
+  (when (and (not (nil? side))
+             ;(some #(= event-name %) [:card :instruction]))
+             (= event-name :card))
+     ;(println "side keypush!" pushed side event-name)
      (reset! state-atom (state-add-response @state-atom pushed side))
      ;(println "staet" @state-atom)
      (.preventDefault e))))
