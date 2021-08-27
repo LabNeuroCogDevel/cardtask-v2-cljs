@@ -95,9 +95,9 @@
 (defn cards-disp
  "display cards. using states current card"
   [{:keys [cards-cur time-cur time-flip]}]
-  (sab/html [:div.allcards
+  (sab/html [:div.container [:div.allcards
              ;[:h3 "yo"]])))
-             (for [s SIDES] (cards-disp-side s cards-cur))]))
+             (for [s SIDES] (cards-disp-side s cards-cur))]]))
 
 (defn animate-star
   [step]
@@ -109,11 +109,12 @@
         sprite (* -1 frame-size (int (mod (* step total-size) frames)))]
     (sab/html [:div.sprite
                {:width "97px"
-                :style {:position "absolute"
+                :style {:position "relative"
                         :left (str x% "%")
                                         ;:top (str x% "%")
                         :width "99px"
                         :height "99px"
+                        :margin-left "-50px"
                         :background-image "url(img/star_spin_sprite.png)"
                         :background-position sprite
                         :background-repeat "no-repeat"
@@ -125,10 +126,22 @@
                {:style {:font-size (str size "px")}}
                "🥺"]])))
 
-(defn image-small [side]
+(defn image-small [side win?]
   (let [img (get-in CARDINFO [:img side])
-       color (-> CARDINFO :color side)]
-    (sab/html [:span {:style {:background-color color}} img])))
+        color (-> CARDINFO :color side)]
+    (sab/html [:span
+                 {:style (if win?
+                           {:background  "url(img/trophy-small.png)"
+                            :display "inline-block"
+                            :width 67
+                            :height 63}
+                           {})}
+               [:span
+                {:style {
+                         :background-color color
+                         :border-radius "50%"
+                         :dispaly "inline-block"
+                         :border "solid black 1px"}} img]])))
 
 (defn feedback-disp
   [{:keys [:trial-last-win :trial :score :time-cur :time-flip] :as state}]
@@ -144,14 +157,26 @@
   (sab/html
    [:div.feedbak
     (if (= trial-last-win trial)
-      (sab/html [:div.win
-                 [:h1 [:span (image-small side) " gave you points!"]]
+      (sab/html [:div.container
+                 (animate-star (- 1 step))
+                 [:div.win
+                  [:h1 [:span (image-small side true)]]
+                  [:span {:style {
+                               :display "inline-block"
+                               :background "url(img/ribbon.png)"
+                               :width "400px"
+                               :height "100px"
+                               :color "white"
+                               :font-weight "bold"
+                               :padding-top "24px"
+                               :font-size "26px"}} "You won a point!"]]
                  (animate-star step)
                  ])
-      (sab/html [:div
+      (sab/html [:div.container
                  (if (nil? side)
                   [:h1 "Too slow! No points!"]
-                  [:p (image-small side) " gave no points!"])
+                  [:h1 (image-small side false) [:br]
+                   [:span {:style {:color "red"}} "No points!"]])
                  [:br]
                  (animate-wrong step)]))
     [:p.score "total points: " score]])))
