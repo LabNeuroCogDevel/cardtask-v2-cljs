@@ -9,11 +9,29 @@
    [cljs-bach.synthesis :as snd]
    [sablono.core :as sab :include-macros true]
    [debux.cs.core :as d :refer-macros [clog clogn dbg dbgn dbg-last break]]
-   [cljs.core.async :refer [<! chan sliding-buffer put! close! timeout]])
+   [cljs.core.async :refer [<! chan sliding-buffer put! close! timeout]]
+   [ajax.core :refer [POST GET]])
   (:require-macros  [cljs.core.async.macros :refer [go-loop go]])
   (:import [goog.events EventType KeyHandler]))
 (enable-console-print!)
 (set! *warn-on-infer* false) ; maybe want to be true
+;; 
+;; AJAX/HTTP
+(def HTTP-DEBUG false)
+(defn get-url [rest] (str (if HTTP-DEBUG "http://0.0.0.0:3000/will/test/1/1/1/" "") rest))
+
+(defn send-info
+  []
+  "TODO: send system info (eg browser, system, resolution, window size"
+  (POST (get-url "info") {:params {:info "TODO!"}}))
+
+(defn send-resp [state]
+  (println "sending state!")
+  (POST (get-url "response") {:params {:json state}}))
+(defn send-finished [] (POST (get-url "finished")))
+
+;;
+;; CARDS
 
 ;; 2 way choice from 3 "cards"
 ;; Left high prob win, Right low prob win, Middle always win (but require multiple pushes)
@@ -349,7 +367,10 @@
 
 
 (defn task-wrap-up [state]
-  ;send state
+  ; update server
+  (send-resp state)
+  (send-finished)
+  ; stop animation
   (assoc state :running? false))
 
 (defn event-next?
@@ -372,6 +393,7 @@
       (assoc
        (case next
          :card     (task-next-trial state)
+         :feedback (do (send-resp state) state)
          :done     (task-wrap-up state)
                    state) ; :last-msg :start :feedback
        :event-name next
@@ -661,15 +683,21 @@
   [state]
   (-> state))
 
-(add-watch STATE :renderer (fn [_ _ _ n] (renderer (world n))))
 
-; TODO: this should go into state-fresh?
-(reset! STATE  @STATE) ; why ?
+(defn main []
+    (add-watch STATE :renderer (fn [_ _ _ n] (renderer (world n))))
+
+    ; TODO: this should go into state-fresh?
+    (reset! STATE  @STATE) ; why ?
 
 
-(instruction 0)
-;(task-start)
+    (send-info)
+    (instruction 0)
+    ;(task-start)
 
-(gev/listen (KeyHandler. js/document)
-            (-> KeyHandler .-EventType .-KEY) ; "key", not same across browsers?
-            (partial keypress! STATE))
+    (gev/listen (KeyHandler. js/document)
+                (-> KeyHandler .-EventType .-KEY) ; "key", not same across browsers?
+                (partial keypress! STATE))
+)
+
+(main)
