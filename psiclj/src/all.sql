@@ -47,6 +47,15 @@ update run set json = :json
         run_number = :run and
         timepoint = :timepoint
 
+-- :name upload-system-info :! :n
+-- :doc create or update response. TODO: add run
+update run set system_info = :info
+  where worker_id = :id and
+        task_name = :task and
+	version = :version and
+        run_number = :run and
+        timepoint = :timepoint
+
 -- :name finish-run :! :n
 -- :doc set finished_at to current time
 update run set finished_at = current_timestamp

@@ -18,16 +18,20 @@
 ;; 
 ;; AJAX/HTTP
 (def HTTP-DEBUG false)
-(defn get-url [rest] (str (if HTTP-DEBUG "http://0.0.0.0:3000/will/test/1/1/1/" "") rest))
+(defn get-url [rest] (str (if HTTP-DEBUG "http://0.0.0.0:3001/will/test/nover/1/1/" "") rest))
 
 (defn send-info
   []
   "TODO: send system info (eg browser, system, resolution, window size"
-  (POST (get-url "info") {:params {:info "TODO!"}}))
+  (POST (get-url "info") {:params {:info "TODO!"} :response-format :json}))
 
 (defn send-resp [state]
   (println "sending state!")
-  (POST (get-url "response") {:params {:json state}}))
+  (POST (get-url "response")
+        {;:params (.stringify js/JSON (clj->js @STATE))
+         :params @STATE
+         :format :json
+         }))
 (defn send-finished [] (POST (get-url "finished")))
 
 ;;
@@ -338,14 +342,17 @@
   [{:keys [:trial] :as state}]
   (println "next trial " trial)
   (let [next-trial (inc trial)
-        next-state (-> state
-                       (assoc
-                        :trial next-trial
-                        :cards-cur (cards-at-trial trial CARDSLIST)))]
-    ;; NB. trial is soon to be prev trial
-    ;; but b/c indexing is zero based,
-    ;; responses@trial refers to future, soon to be current trial.
-    (update-in next-state [:responses trial :choices] #(:cur-cards %))))
+        ;; NB. trial is soon to be prev trial
+        ;; but b/c indexing is zero based,
+        ;; responses@trial refers to future, soon to be current trial.
+        cards-cur (cards-at-trial trial CARDSLIST)
+        next-state (-> state (assoc :trial next-trial :cards-cur cards-cur))]
+    (-> next-state 
+      ; remove picked (always null at start of trial)
+      ;so it doesn't conflict with true source of info ":side"
+      (assoc-in [:responses trial :choices] (dissoc cards-cur :picked))
+      ; again trial is 0index current or 1index past
+      (assoc-in [:responses trial :trial] next-trial))))
 
 (defn state-fresh
   "starting fresh. use starting-state but
@@ -549,7 +556,7 @@
               [:ul [:li "Some cards are better at getting points than others"]
                [:li " Some cards require " [:b "more than one key push"]]
                [:li "You'll have to learn this as you go."]
-               [:li [:b "As the game progress, some cards will change how often they give points"]]]])
+               [:li [:b "As the game progresses, some cards will change how often they give points"]]]])
    (sab/html [:div [:p "The cards will always be in the same order"]
               [:p "Choose a card using the arrow keys. Push"]
               [:ul
