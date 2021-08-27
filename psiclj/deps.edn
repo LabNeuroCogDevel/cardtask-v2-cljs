@@ -6,14 +6,16 @@
         com.layerware/hugsql {:mvn/version "0.5.1"}
         ;HTTP
         compojure/compojure {:mvn/version "1.6.2"}
-        http-kit/http-kit {:mvn/version "2.3.0"}
-        ring/ring-core    {:mvn/version "1.6.3"}
-        ring/ring-json    {:mvn/version "0.4.0"}
-        clj-http-lite/clj-http-lite {:mvn/version "0.3.0"}
+        http-kit/http-kit {:mvn/version "2.5.3"}
+        ring/ring-core    {:mvn/version "1.9.4"}
+        ring/ring-json    {:mvn/version "0.5.1"}
+        ;clj-http-lite/clj-http-lite {:mvn/version "0.4.3"}
         }
  :paths ["src" "classes"]
  :aliases {:native-image {:main-opts ["-m" "clj.native-image" "psiclj"
                                       "--initialize-at-build-time"
+                                      "--no-fallback"
+                                      "--allow-incomplete-classpath"
                                       ;; optional native image name override
                                       ;"-H:Name=psiclj"
                                       ]

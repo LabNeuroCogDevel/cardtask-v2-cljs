@@ -5,14 +5,11 @@
    ; HTTP - server
    [org.httpkit.server :as srv]
    ; HTTP - routes
-   ;[clj-http.lite.client :as http]
    [clojure.java.io :as io]
    [compojure.core :refer [routes wrap-routes defroutes GET POST]]
    [compojure.route :as route]
-   ;[hickory.core :as hick]
    [ring.middleware.json :as json]
    [ring.util.response :as resp]
-
 )
   (:gen-class))
 
@@ -70,5 +67,5 @@
   (finish-run DB run-data)
 
   (println "Hello, Web!")
-  (srv/run-server #'app {:port 3000})
+  (def server (srv/run-server #'app {:port 3000}))
 )
