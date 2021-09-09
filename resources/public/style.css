@@ -32,7 +32,7 @@ div.container {
    min-height: 220px;
    min-width: 200px;
 }
-.card-container{ display: inline-block;}
+.card-container{ display: inline-block; position: relative;}
 .card-container-instuctions { display: inline-block; min-width: 420px;}
 .card {
    display: inline-flex;
@@ -48,3 +48,9 @@ div.container {
    font-size: 80px;
    color: white;
 }
+
+/*div.card > img {filter: invert()}*/
+div.dots {position: absolute; bottom: 10px; text-align: center; font-size: 5px;}
+div.dots > span { height: 10px; width: 10px; border-radius:50%; display: inline-block; border: solid black 1px;}
+div.dots > span.fill { background: green;}
+div.dots > span.nopush { background: gray;}

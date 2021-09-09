@@ -69,10 +69,12 @@
 (defn card-side-zip [vals] (zipmap SIDES (take 3 (shuffle vals))))
 (defn mk-card-info []
   (let [colors (card-side-zip ["blue", "red", "yellow", "lightgreen", "orange"])
-        imgs   (card-side-zip ["✿", "❖", "✢", "⚶", "⚙", "✾"])
+        syms   (card-side-zip ["✿", "❖", "✢", "⚶", "⚙", "✾"])
+        imgs   (card-side-zip ["cerberus" "cockatrice" "dragon" "fish" "griffin" "phoenix" "serpant" "snake" "unicorn"])
         probs  (card-side-zip [[80   20 100] [20   80 100] [100 100 100]])]
      {:color  colors
       :img    imgs
+      :syms   syms
       :probs  probs
       :pushes (zipmap SIDES (map npush-by-prob (vals probs)))}))
 
@@ -95,7 +97,18 @@
              :rep reps}})
 
 ;; how to handle each event
-(defn cards-empty [side] (sab/html [:div.card {:class (name side)} (unescapeEntities "&nbsp;")]))
+(defn text-or-img
+  [img & {:keys [width height] :or {width 90 height nil}}]
+  (if (= (count img) 1)
+    img
+    (sab/html [:img {:src (str "img/creatures/" img ".svg")
+                     :width (str width "px")
+                     :height (if height (str height "px") "auto")}])))
+(defn cards-empty [side]
+  (sab/html [:div.card {:class (name side)}
+             ;(unescapeEntities "&nbsp;")
+             [:img {:src "img/creatures/snake.svg" :width "90x" :style {:opacity 0}}]
+             [:div.dots [:span.nopush ""]]]))
 (defn cards-disp-one
  [side {:keys [:img :push-seen :push-need] :as card}]
  "show only this card."
@@ -103,8 +116,12 @@
  (sab/html
   [:div.card {:class [(name side)]
               :style {:background (get-in CARDINFO [:color side])
-                      :transform (str "scale("scale","scale")")}}
-   img])))
+                      ;:transform (str "scale("scale","scale")")
+                      }}
+   (text-or-img img)
+   [:div.dots
+    (map #(sab/html [:span {:class (if (> push-seen %) "fill" "empty")}]) (range push-need)) 
+    ]])))
 (defn cards-disp-side
   [side cards-cur]
   "show card or empty div"
@@ -163,7 +180,7 @@
                          :background-color color
                          :border-radius "50%"
                          :dispaly "inline-block"
-                         :border "solid black 1px"}} img]])))
+                         :border "solid black 1px"}} (text-or-img img :width 30 :height 30)]])))
 
 (defn feedback-disp
   [{:keys [:trial-last-win :trial :score :time-cur :time-flip] :as state}]
@@ -568,9 +585,9 @@
      [:p "Here's an example with arrow keys instead of the card symbols you'll see later"]
     [:div.allcards
      [:div.card-container-instructions
-      (cards-disp-one :left   {:img "←" :push-seen 0 :push-need 10})
-      (cards-disp-one :middle {:img "↓" :push-seen 0 :push-need 10})
-      (cards-disp-one :right  {:img "→" :push-seen 0 :push-need 10})]]])])
+      (cards-disp-one :left   {:img "←" :push-seen 0 :push-need 1})
+      (cards-disp-one :middle {:img "↓" :push-seen 0 :push-need 1})
+      (cards-disp-one :right  {:img "→" :push-seen 0 :push-need 1})]]])])
 
 (defn instruction [inst-idx]
   (let [idx (max 0 inst-idx)
@@ -579,7 +596,9 @@
     (reset! STATE (assoc  @STATE :instruction-idx idx))
 
     (showme-this (if (< idx ninstruction)
-                   (sab/html [:div.instructions
+                   (sab/html
+                    [:div.instructions
+                     (show-debug @STATE)
                               (nth INSTRUCTIONS idx)
                               [:br]
                               [:button
