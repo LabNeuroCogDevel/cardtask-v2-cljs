@@ -68,13 +68,14 @@
   (if (every? #(= 100 %) probs) 3 1))
 (defn card-side-zip [vals] (zipmap SIDES (take 3 (shuffle vals))))
 (defn mk-card-info []
-  (let [colors (card-side-zip ["lightblue", "red", "yellow", "lightgreen", "orange"])
-        syms   (card-side-zip ["✿", "❖", "✢", "⚶", "⚙", "✾"])
-        imgs   (card-side-zip ["cerberus" "cockatrice" "dragon" "fish" "griffin" "serpant" "snake" "phoenix" "unicorn"])
+  (let [;colors (card-side-zip ["lightblue", "red", "yellow", "lightgreen", "orange"])
+        colors (card-side-zip ["blue" "green" "purple" "red" "yellow"])
+        ;syms   (card-side-zip ["✿", "❖", "✢", "⚶", "⚙", "✾"])
+        ;line-imgs   (card-side-zip ["cerberus" "cockatrice" "dragon" "fish" "griffin" "serpant" "snake" "phoenix" "unicorn"])
+        imgs (card-side-zip ["blue" "brightyellow" "darkgreen" "forestgreen" "purple" "red" "teal" "yellow1"])
         probs  (card-side-zip [[80   20 100] [20   80 100] [100 100 100]])]
      {:color  colors
       :img    imgs
-      :syms   syms
       :probs  probs
       :pushes (zipmap SIDES (map npush-by-prob (vals probs)))}))
 
@@ -98,7 +99,7 @@
 
 ;; how to handle each event
 (defn img-url [img] "img name to url"
- (str "img/creatures/" img ".svg"))
+ (str "img/DawTask/alien_" img ".svg"))
 
 (defn text-or-img
   [img & {:keys [width height] :or {width 90 height nil}}]
@@ -110,15 +111,16 @@
 (defn cards-empty [side]
   (sab/html [:div.card {:class (name side)}
              ;(unescapeEntities "&nbsp;")
-             [:img {:src (img-url "snake") :width "90x" :style {:opacity 0}}]
+             [:img {:src (img-url "yellow") :width "90x" :style {:opacity 0}}]
              [:div.dots [:span.nopush ""]]]))
+(defn color-to-planet [color] (str "url('img/DawTask/card_" color "planet.jpg"))
 (defn cards-disp-one
  [side {:keys [:img :push-seen :push-need] :as card}]
  "show only this card."
  (let [scale (min 2 (+ 1 (/ push-seen push-need)))]
  (sab/html
   [:div.card {:class [(name side)]
-              :style {:background (get-in CARDINFO [:color side])
+              :style {:background-image (color-to-planet (get-in CARDINFO [:color side]))
                       ;:transform (str "scale("scale","scale")")
                       }}
    (text-or-img img)
