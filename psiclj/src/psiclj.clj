@@ -85,16 +85,19 @@
    (route/not-found {:status 404 :body (read-file "not-found.html")})))
 
 ;; 
-;; Main
-(defonce server (atom nil))
-(defn -main [& args]
+;; exercise
+(defn excercise-db []
   (def run-data {:id "will" :task "test" :version "x" :run 1 :timepoint 1 :json "[]" :info "[]"})
-
   (create-run-table DB)
   (already-done? run-data)
   (create-run DB (assoc run-data :info "[{system: \"none\"}]"))
   (upload-json DB (assoc run-data :json "[{data: [1,3]}]"))
-  (finish-run DB run-data)
+  (finish-run DB run-data))
 
-  (println "Running webserver")
-  (reset! server (srv/run-server #'app {:port 3001})))
+;; 
+;; Main
+(defonce server (atom nil))
+(defn -main [& args]
+  (let [port (or (System/getenv "PORT") 3001)]
+    (println (str "Running webserver on " PORT))
+    (reset! server (srv/run-server #'app {:port port}))))
