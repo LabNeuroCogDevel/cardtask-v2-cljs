@@ -111,7 +111,7 @@
 (defn cards-empty [side]
   (sab/html [:div.card {:class (name side)}
              ;(unescapeEntities "&nbsp;")
-             [:img {:src (img-url "yellow") :width "90x" :style {:opacity 0}}]
+             [:img {:src (img-url "yellow1") :width "90x" :style {:opacity 0}}]
              [:div.dots [:span.nopush ""]]]))
 (defn color-to-planet [color] (str "url('img/DawTask/card_" color "planet.jpg"))
 (defn cards-disp-one
