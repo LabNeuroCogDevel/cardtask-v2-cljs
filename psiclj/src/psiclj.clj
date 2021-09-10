@@ -19,10 +19,18 @@
 ;; 
 ;; DB
 
-(def DB
-  {:subprotocol "sqlite"
-   :classname "org.sqlite.JDBC"
-   :subname "psiclj.sqlite3"})
+(defn get-db-params []
+  "setup database default to hardcoded psiclj.sqlite3. otherwise use postgres"
+  (let [db (System/getenv "DATABASE_URL")]
+    (if db
+      {:subprotocol "postgresql"
+       :subname db} ; //host:port/db_name?user=xxx&password=yyyy"
+      {:subprotocol "sqlite"
+       :classname "org.sqlite.JDBC"
+       :subname "psiclj.sqlite3"})))
+
+(def DB (get-db-params))
+
 
 (hugsql/def-db-fns "all.sql")
 (hugsql/def-sqlvec-fns "all.sql")
