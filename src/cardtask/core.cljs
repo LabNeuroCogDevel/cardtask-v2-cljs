@@ -68,9 +68,9 @@
   (if (every? #(= 100 %) probs) 3 1))
 (defn card-side-zip [vals] (zipmap SIDES (take 3 (shuffle vals))))
 (defn mk-card-info []
-  (let [colors (card-side-zip ["blue", "red", "yellow", "lightgreen", "orange"])
+  (let [colors (card-side-zip ["lightblue", "red", "yellow", "lightgreen", "orange"])
         syms   (card-side-zip ["✿", "❖", "✢", "⚶", "⚙", "✾"])
-        imgs   (card-side-zip ["cerberus" "cockatrice" "dragon" "fish" "griffin" "phoenix" "serpant" "snake" "unicorn"])
+        imgs   (card-side-zip ["cerberus" "cockatrice" "dragon" "fish" "griffin" "serpant" "snake" "phoenix" "unicorn"])
         probs  (card-side-zip [[80   20 100] [20   80 100] [100 100 100]])]
      {:color  colors
       :img    imgs
@@ -97,17 +97,20 @@
              :rep reps}})
 
 ;; how to handle each event
+(defn img-url [img] "img name to url"
+ (str "img/creatures/" img ".svg"))
+
 (defn text-or-img
   [img & {:keys [width height] :or {width 90 height nil}}]
   (if (= (count img) 1)
     img
-    (sab/html [:img {:src (str "img/creatures/" img ".svg")
+    (sab/html [:img {:src (img-url img)
                      :width (str width "px")
                      :height (if height (str height "px") "auto")}])))
 (defn cards-empty [side]
   (sab/html [:div.card {:class (name side)}
              ;(unescapeEntities "&nbsp;")
-             [:img {:src "img/creatures/snake.svg" :width "90x" :style {:opacity 0}}]
+             [:img {:src (img-url "snake") :width "90x" :style {:opacity 0}}]
              [:div.dots [:span.nopush ""]]]))
 (defn cards-disp-one
  [side {:keys [:img :push-seen :push-need] :as card}]
@@ -120,7 +123,7 @@
                       }}
    (text-or-img img)
    [:div.dots
-    (map #(sab/html [:span {:class (if (> push-seen %) "fill" "empty")}]) (range push-need)) 
+    (map #(sab/html [:span {:class (if (> push-seen %) "fill" "empty")}]) (range push-need))
     ]])))
 (defn cards-disp-side
   [side cards-cur]
@@ -129,7 +132,6 @@
              (if-let [card-info (side cards-cur)]
                (cards-disp-one side card-info)
                (cards-empty side))]))
-
 
 (defn cards-disp
  "display cards. using states current card"
@@ -182,6 +184,24 @@
                          :dispaly "inline-block"
                          :border "solid black 1px"}} (text-or-img img :width 30 :height 30)]])))
 
+(defn feedback-trophy-sym [side]
+  (sab/html [:h1 [:span (image-small side true)]]))
+
+(defn feedback-trophy [side]
+  (let [img (get-in CARDINFO [:img side])
+        color (-> CARDINFO :color side)]
+  (sab/html [:div
+             [:img {:src "img/trophy-small.png"} ]
+             [:img {:src (img-url img) :width "90px" :style {:padding "2px" :margin "0 20px 5px 20px" :background color}}]
+             ; masking is slow! color isn't useful
+             ;[:span {:style {:background color :margin "0 20px 0 20px"
+             ;                :mask-size "contain" :mask (str "url('img/creatures/" img ".svg')") :mask-repeat "no-repeat"
+             ;                :height "90px"
+             ;                :width "90px"
+             ;                :mask-position "center"
+             ;                :display "inline-block" }}]
+             [:img {:src "img/trophy-small.png"} ]])))
+
 (defn feedback-disp
   [{:keys [:trial-last-win :trial :score :time-cur :time-flip] :as state}]
   "feedback: win or not?
@@ -199,7 +219,7 @@
       (sab/html [:div.container
                  (animate-star (- 1 step))
                  [:div.win
-                  [:h1 [:span (image-small side true)]]
+                  (feedback-trophy side)
                   [:span {:style {
                                :display "inline-block"
                                :background "url(img/ribbon.png)"
@@ -281,8 +301,13 @@
   [card-info reps]
   (cardseq (vals (mk-card-scheme card-info reps))))
 
-(def CARDINFO (mk-card-info))
-(def CARDSLIST (mk-card-list CARDINFO 3))
+
+(defn cards-reset []
+  "rerun random selection of card sym/img and color"
+  (def CARDINFO (mk-card-info))
+  (def CARDSLIST (mk-card-list CARDINFO 3)))
+
+(cards-reset)
 
 (defn cards-at-trial
   "rearrange from vect to map. depends on CARDSLIST
@@ -364,7 +389,7 @@
         ;; responses@trial refers to future, soon to be current trial.
         cards-cur (cards-at-trial trial CARDSLIST)
         next-state (-> state (assoc :trial next-trial :cards-cur cards-cur))]
-    (-> next-state 
+    (-> next-state
       ; remove picked (always null at start of trial)
       ;so it doesn't conflict with true source of info ":side"
       (assoc-in [:responses trial :choices] (dissoc cards-cur :picked))
@@ -661,6 +686,7 @@
   [:ul.bar {:class (if (:running? state) "running" "stoppped")}
    [:li {:on-click task-toggle} "tog"]
    [:li {:on-click task-restart}   "restart"]
+   [:li {:on-click cards-reset}   "cards-reset"]
    [:li {:on-click (fn [_] ((task-stop) (instruction 0)))} "instructions"]
    [:li {:on-click (fn [_] (play-audio {:url "audio/cash.mp3" :dur .5}))}  "cash"]
    [:li {:on-click (fn [_] (play-audio {:url "audio/buzzer.mp3" :dur .5}))} "buz"]
