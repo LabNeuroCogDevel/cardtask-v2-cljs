@@ -14,6 +14,8 @@
 )
   (:gen-class))
 
+(def *VERSION* "20210909-init")
+
 ;; 
 ;; DB
 
@@ -54,12 +56,12 @@
          (resp/response {:ok status})))))
 
 (defroutes task-run-context
-  (context "/:id/:task/:version/:timepoint/:run" req (task-run req)))
+  (context "/:id/:task/:timepoint/:run" req (task-run (assoc-in req [:params :version] *VERSION*))))
 
 (defroutes pages
-  (context "/:id/:task/:version/:timepoint/:run" req
+  (context "/:id/:task/:timepoint/:run" req
     (GET "/" []
-        (let [run-info (assoc (:params req) :info "") ]
+        (let [run-info (assoc (:params req) :info "" :version *VERSION*) ]
         (if (already-done?  run-info)
             (resp/response "already done!")
             (do
