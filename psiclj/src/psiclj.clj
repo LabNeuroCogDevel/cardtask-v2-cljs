@@ -14,7 +14,7 @@
 )
   (:gen-class))
 
-(def *VERSION* "20210909-init")
+(def VERSION "20210909-init")
 
 ;; 
 ;; DB
@@ -64,12 +64,12 @@
          (resp/response {:ok status})))))
 
 (defroutes task-run-context
-  (context "/:id/:task/:timepoint/:run" req (task-run (assoc-in req [:params :version] *VERSION*))))
+  (context "/:id/:task/:timepoint/:run" req (task-run (assoc-in req [:params :version] VERSION))))
 
 (defroutes pages
   (context "/:id/:task/:timepoint/:run" req
     (GET "/" []
-        (let [run-info (assoc (:params req) :info "" :version *VERSION*) ]
+        (let [run-info (assoc (:params req) :info "" :version VERSION) ]
         (if (already-done?  run-info)
             (resp/response "already done!")
             (do
@@ -98,6 +98,8 @@
 ;; Main
 (defonce server (atom nil))
 (defn -main [& args]
-  (let [port (or (System/getenv "PORT") 3001)]
-    (println (str "Running webserver on " PORT))
+  (let [port (Integer/parseInt (or (System/getenv "PORT") "3001"))]
+    (println (str "creating run talbe on " (:subname DB)))
+    (create-run-table DB)
+    (println (str "Running webserver on " port))
     (reset! server (srv/run-server #'app {:port port}))))
