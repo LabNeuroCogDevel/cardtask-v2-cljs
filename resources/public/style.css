@@ -53,4 +53,5 @@ div.container {
 div.dots {position: absolute; bottom: 10px; text-align: center; font-size: 5px;}
 div.dots > span { height: 10px; width: 10px; border-radius:50%; display: inline-block; border: solid black 1px;}
 div.dots > span.fill { background: green;}
-div.dots > span.nopush { background: gray;}
+div.dots > span.empty { background: white;}
+div.dots > span.nopush { background: gray; opacity: 0}
