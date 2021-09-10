@@ -1,1 +1,1 @@
-web: cd psiclj && clj -m psiclj
+web: clj -Sdeps '{:deps {psiclj {:local/root "psiclj"}}}' -m psiclj
