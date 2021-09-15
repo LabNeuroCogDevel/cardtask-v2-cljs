@@ -12,7 +12,7 @@
    [cljs.core.async :refer [<! chan sliding-buffer put! close! timeout]]
    [ajax.core :refer [POST GET]])
   (:require-macros  [cljs.core.async.macros :refer [go-loop go]])
-  (:import [goog.events EventType KeyHandler]))
+  (:import [goog.events EventType]))
 (enable-console-print!)
 (set! *warn-on-infer* false) ; maybe want to be true
 ;; 
@@ -62,10 +62,12 @@
                    [[80   20 100]
                     [20   80 100]
                     [100 100 100]]))
+
+(def MAXPUSH "most push that'd be required" 5)
 (defn npush-by-prob
   [probs]
-  "require 3 pushes if always 100% prob of correct"
-  (if (every? #(= 100 %) probs) 3 1))
+  "require 5 pushes if always 100% prob of correct. 3 otherwise"
+  (if (every? #(= 100 %) probs) 3 MAXPUSH))
 (defn card-side-zip [vals] (zipmap SIDES (take 3 (shuffle vals))))
 (defn mk-card-info []
   (let [;colors (card-side-zip ["lightblue", "red", "yellow", "lightgreen", "orange"])
@@ -114,9 +116,28 @@
              [:img {:src (img-url "yellow1") :width "90x" :style {:opacity 0}}]
              [:div.dots [:span.nopush ""]]]))
 (defn color-to-planet [color] (str "url('img/DawTask/card_" color "planet.jpg"))
+
+(defn cards-resp-pos-dots [push-seen push-need]
+(sab/html [:div.dots
+    (map #(sab/html [:span {:class (if (> push-seen %) "fill" "empty")}]) (range push-need))
+    ]))
+
+(defn cards-resp-pos-bar
+  "show a progress bar"
+  [push-seen push-need]
+  (let [percent (-> push-seen (/ push-need) (* 100))
+        parent-width-px (-> push-need (/ MAXPUSH) (* 60))
+        color (cond (> percent 80) "green"
+                    (> percent 50) "blue"
+                    (> percent 20) "orange"
+                    :else "white")]
+    (sab/html [:div.respbar {:style {:width (str parent-width-px "px")}}
+               [:div {:style {:background-color color
+                                   :width (str percent "%")}}]])))
+
 (defn cards-disp-one
- [side {:keys [:img :push-seen :push-need] :as card}]
  "show only this card."
+ [side {:keys [:img :push-seen :push-need] :as card}]
  (let [scale (min 2 (+ 1 (/ push-seen push-need)))]
  (sab/html
   [:div.card {:class [(name side)]
@@ -124,9 +145,8 @@
                       ;:transform (str "scale("scale","scale")")
                       }}
    (text-or-img img)
-   [:div.dots
-    (map #(sab/html [:span {:class (if (> push-seen %) "fill" "empty")}]) (range push-need))
-    ]])))
+   (cards-resp-pos-bar push-seen push-need)
+   ])))
 (defn cards-disp-side
   [side cards-cur]
   "show card or empty div"
@@ -391,6 +411,8 @@
         ;; responses@trial refers to future, soon to be current trial.
         cards-cur (cards-at-trial trial CARDSLIST)
         next-state (-> state (assoc :trial next-trial :cards-cur cards-cur))]
+    (reset! KEYPRESSTIME (keypress-init-card))
+    (println "updating keypress accepted" @KEYPRESSTIME)
     (-> next-state
       ; remove picked (always null at start of trial)
       ;so it doesn't conflict with true source of info ":side"
@@ -474,6 +496,7 @@
 (defn task-start
   "kick of run-loop. will stop if not :running?"
   []
+  ;(reset! KEYPRESSTIME (keypress-init-card)) ; done in task-next-trial
   (.requestAnimationFrame
    js/window
    (fn [time]
@@ -622,25 +645,22 @@
 
     (reset! STATE (assoc  @STATE :instruction-idx idx))
 
-    (showme-this (if (< idx ninstruction)
-                   (sab/html
-                    [:div.instructions
-                     (show-debug @STATE)
-                              (nth INSTRUCTIONS idx)
-                              [:br]
-                              [:button
-                               {:on-click (fn [_] (instruction (dec idx)))}
-                              "prev"]
-                              [:button
-                               {:on-click (fn [_] (instruction (inc idx)))}
-                               "next"]
-                              ])
-      (sab/html [:div
-                 [:p "Find a comfortable way to rest your fingers on the arrow keys!"]
-                 [:p "Push the space key when you're ready"]
-                 [:button {:on-click (fn [_] (task-start))}
-                  "I'm ready!"]])))))
+    ;TODO: maybe example trial here?
 
+    (showme-this
+     (if (< idx ninstruction)
+       (sab/html
+        [:div.instructions (show-debug @STATE) (nth INSTRUCTIONS idx)
+         [:br]
+         [:button {:on-click (fn [_] (instruction (dec idx)))} "prev"]
+         [:button {:on-click (fn [_] (instruction (inc idx)))} "next"]])
+       (sab/html [:div
+                  [:p "Find a comfortable way to rest your fingers on the arrow keys!"]
+                  [:p "Push the space key when you're ready"]
+                  [:button {:on-click (fn [_] (task-start))}
+                   "I'm ready!"]])))))
+
+; TODO: add eg {:side-key-only :left :pushed 0 :need 3} to state
 (defn instruction-keypress [state-atom key]
   (let [iidx (:instruction-idx @state-atom)
         ninstruction (count INSTRUCTIONS)
@@ -657,26 +677,85 @@
 
 
 ;;; 
-(defn keypress! [state-atom e]
-  (let [pushed (.. e -keyCode)
-        cards-cur (:cards-cur @state-atom)
-        trial (:trial @state-atom)
-        event-name (:event-name @state-atom)
+;;; keypresses get their own atom/state
+;; concerns:
+;; need up to clear what key is currently down
+;; can be lost if e.g. ctrl-tab away
+(defn keydown-card! [pushed]
+  (let [cards-cur (:cards-cur @STATE)
+        trial (:trial @STATE)
+        event-name (:event-name @STATE)
         side (cards-pushed-side pushed cards-cur)]
-
-
-  ;no keys on feedback, start, last-msg, or done
-  ; instruction doesn't use state or keypresses (but could here)
   (when (and (not (nil? side))
-             ;(some #(= event-name %) [:card :instruction]))
              (= event-name :card))
-     ;(println "side keypush!" pushed side event-name)
-     (reset! state-atom (state-add-response @state-atom pushed side))
-     ;(println "staet" @state-atom)
-     (.preventDefault e))
+     (reset! STATE (state-add-response @STATE pushed side)))))
 
-  ;check instructions
-  (when (<= trial 0) (instruction-keypress state-atom pushed))))
+(defn keyhold-card! [key] (println "hold key" key))
+
+(defn keypress-init [] {:key nil
+                        :first nil
+                        :up nil
+                        :callback-up nil
+                        :callback-first nil
+                        :callback-hold nil
+                        :reset #'keypress-init
+                        :count 0
+                        :max-wait 0
+                        :waiting []})
+(defn keypress-init-card [] (assoc (keypress-init)
+                                   :reset #'keypress-init-card
+                                   :waiting (flatten (vals KEYS))
+                                   :callback-first #'keydown-card!
+                                   :callback-hold #'keydown-card!))
+(defn keypress-init-instruction []
+  (assoc (keypress-init)
+         :reset #'keypress-init-instruction
+         :waiting (:next KEYS)
+         ;:callback-first #'keydown-card!
+         ;:callback-hold #'keyhold-card!
+         :callback-up (partial instruction-keypress STATE)))
+
+(def KEYPRESSTIME (atom (keypress-init)))
+(defn keypress-updown! [direction e]
+  "passthrough function. partial used on listener wont get repl updates.
+  so this intermidate exists and dispatches to approprate up or down"
+  (let [key (.. e -keyCode)
+        time (.getTime (js/Date.))]
+    (case direction
+      :up   (keypress-up! STATE key time)
+      :down (keypress-down! STATE key time)
+      nil)))
+
+(defn run-if [fnc & rest] (when fnc (apply fnc rest)))
+(defn keypress-callback [keystate cbname key] (run-if (cbname keystate) key))
+
+(defn keypress-down! [state-atom key time]
+  (let [waitingkey? (some #(= key %) (:waiting @KEYPRESSTIME))
+        prev (:key @KEYPRESSTIME)
+        count (:count @KEYPRESSTIME)
+        new? (or (not prev) (not= prev key)) ]
+    ;(println key waitingkey? new? prev count )
+    ; missed a keyup (lost focus)
+    (when (and prev new?)
+      (keypress-up! state-atom prev time))
+    ; hit a key we wanted
+    (when waitingkey?
+      (if new?
+          (do
+              (swap! KEYPRESSTIME assoc :first time :key key)
+              (keypress-callback @KEYPRESSTIME :callback-first key))
+          (do
+              (swap! KEYPRESSTIME assoc :count (inc count))
+              (keypress-callback @KEYPRESSTIME :callback-hold key))))))
+
+(defn keypress-up! [state-atom key time]
+  (println "key up" key @KEYPRESSTIME)
+  ; if callback is specified, send key to function
+  (swap! KEYPRESSTIME assoc :up time)
+  (keypress-callback @KEYPRESSTIME :callback-up key)
+  (println "reset?" (:reset @KEYPRESSTIME))
+  (reset! KEYPRESSTIME ((:reset @KEYPRESSTIME)))
+  (println "reset"))
 
 
 (defn state-toggle-setting [setting] (reset! STATE (update-in @STATE setting not)))
@@ -738,6 +817,9 @@
   (-> state))
 
 
+(defn key-disbatch! [dir e]
+  (println "disbatch" dir))
+
 (defn main []
     (add-watch STATE :renderer (fn [_ _ _ n] (renderer (world n))))
 
@@ -747,11 +829,11 @@
 
     (send-info)
     (instruction 0)
-    ;(task-start)
+    ; should this go in instructions?
+    (reset! KEYPRESSTIME (keypress-init-instruction))
 
-    (gev/listen (KeyHandler. js/document)
-                (-> KeyHandler .-EventType .-KEY) ; "key", not same across browsers?
-                (partial keypress! STATE))
-)
+    ;(task-start)
+   (.addEventListener js/document "keydown" (partial keypress-updown! :down))
+   (.addEventListener js/document "keyup" (partial keypress-updown! :up)))
 
 (main)

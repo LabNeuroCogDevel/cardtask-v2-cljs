@@ -50,6 +50,8 @@ div.container {
 }
 
 /*div.card > img {filter: invert()}*/
+div.respbar {position: absolute; bottom: 10px;  width:60px; height: 10px; background: white; opacity: 60%}
+div.respbar>div {height: 10px;}
 div.dots {position: absolute; bottom: 10px; text-align: center; font-size: 5px;}
 div.dots > span { height: 10px; width: 10px; border-radius:50%; display: inline-block; border: solid black 1px;}
 div.dots > span.fill { background: green;}
