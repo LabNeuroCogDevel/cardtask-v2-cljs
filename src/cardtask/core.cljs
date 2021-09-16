@@ -49,15 +49,6 @@
                                    :waiting (flatten (vals KEYS))
                                    :callback-first #'keydown-card!
                                    :callback-hold #'keydown-card!))
-(defn keypress-init-instruction []
-  (assoc (key/keypress-init)
-         :reset #'keypress-init-instruction
-         :waiting (:next KEYS)
-         ;:callback-first #'keydown-card!
-         ;:callback-hold #'keyhold-card!
-         :callback-up (partial instruction-keypress STATE)))
-
-
 ;; 
 ;; how to handle each event
 
@@ -337,7 +328,7 @@
    [:li {:on-click task-toggle} "tog"]
    [:li {:on-click task-restart}   "restart"]
    [:li {:on-click (fn [_] cards-reset 3)}   "cards-reset"]
-   [:li {:on-click (fn [_] ((task-stop) (instruction 0 STATE)))} "instructions"]
+   [:li {:on-click (fn [_] ((task-stop) (instruction 0 #'task-start STATE)))} "instructions"]
    [:li {:on-click (fn [_] (play-audio {:url "audio/cash.mp3" :dur .5}))}  "cash"]
    [:li {:on-click (fn [_] (play-audio {:url "audio/buzzer.mp3" :dur .5}))} "buz"]
    ;[:li {:on-click (fn [_] (renderer (world state)))} "update-debug"]
@@ -387,25 +378,32 @@
   (-> state))
 
 
-(defn key-disbatch! [dir e]
-  (println "disbatch" dir))
+(defn keypress-init-instruction []
+  (assoc (key/keypress-init)
+         :reset #'keypress-init-instruction
+         :waiting (:next KEYS)
+         ;:callback-first #'keydown-card!
+         ;:callback-hold #'keyhold-card!
+         :callback-up (partial instruction-keypress STATE #'task-start)))
+
+
 
 (defn -main []
-    (add-watch STATE :renderer (fn [_ _ _ n] (renderer (world n))))
-    ; doesn't work
-    (sound/preload-sounds)
+  (add-watch STATE :renderer (fn [_ _ _ n] (renderer (world n))))
+  ; doesn't work
+  (sound/preload-sounds)
 
-    ; TODO: this should go into state-fresh?
-    (reset! STATE  @STATE) ; why ?
+  ; TODO: this should go into state-fresh?
+  (reset! STATE  @STATE) ; why ?
 
 
-    (send-info)
-    (instruction 0 STATE)
-    ; should this go in instructions?
-    (reset! key/KEYPRESSTIME (keypress-init-instruction))
+  (send-info)
+  (instruction 0 #'task-start STATE) ;(task-start)
 
-    ;(task-start)
-   (.addEventListener js/document "keydown" (partial key/keypress-updown! :down))
-   (.addEventListener js/document "keyup" (partial key/keypress-updown! :up)))
+  ; should this go in instructions?
+  (reset! key/KEYPRESSTIME (keypress-init-instruction))
+
+  (.addEventListener js/document "keydown" (partial key/keypress-updown! :down))
+  (.addEventListener js/document "keyup" (partial key/keypress-updown! :up)))
 
 (-main)

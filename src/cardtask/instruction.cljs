@@ -37,7 +37,7 @@
       (cards-disp-one :middle {:img "↓" :push-seen 0 :push-need 1})
       (cards-disp-one :right  {:img "→" :push-seen 0 :push-need 1})]]])])
 
-(defn instruction [inst-idx state-atom]
+(defn instruction [inst-idx after-func state-atom]
   (let [idx (max 0 inst-idx)
         ninstruction (count INSTRUCTIONS)]
 
@@ -55,21 +55,21 @@
        (sab/html [:div
                   [:p "Find a comfortable way to rest your fingers on the arrow keys!"]
                   [:p "Push the space key when you're ready"]
-                  [:button {:on-click (fn [_] (task-start))}
+                  [:button {:on-click (fn [_] (after-func))}
                    "I'm ready!"]])))))
 
 
 ; TODO: add eg {:side-key-only :left :pushed 0 :need 3} to state
-(defn instruction-keypress [state-atom key]
+(defn instruction-keypress [state-atom after-func key]
   (let [iidx (:instruction-idx @state-atom)
         ninstruction (count INSTRUCTIONS)
         instruction-done? (>= iidx (inc ninstruction))
         pushed (any-accept-key key)]
   (when (and (not instruction-done?)  pushed)
-    (if (= ninstruction iidx) (task-start)
-    (case pushed
-      :next  (instruction (min ninstruction (inc iidx)) state-atom)
-      (println "instuctions: have " pushed)
-      ;:left  (instruction (max 0 (dec iidx)))
-      ;:right (instruction (inc iidx))
-  )))))
+    (if (= ninstruction iidx)
+      (after-func)
+      (case pushed
+        :next  (instruction (min ninstruction (inc iidx)) after-func state-atom)
+        ;:left  (instruction (max 0 (dec iidx)))
+        ;:right (instruction (inc iidx))
+        (println "instuctions: pushed unused key " pushed))))))
