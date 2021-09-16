@@ -1,7 +1,8 @@
 (ns cardtask.view
   (:require 
-   [cardtask.cards :refer [SIDES CARDINFO MAXPUSH]]
-   [sablono.core :as sab :include-macros true]))
+   [cardtask.cards :refer [SIDES CARDINFO MAXPUSH MAXDUR]]
+   [sablono.core :as sab :include-macros true])
+  (:require-macros [devcards.core :refer [defcard]]))
 
 (defn color-to-planet [color] (str "url('img/DawTask/card_" color "planet.jpg"))
 
@@ -68,3 +69,6 @@
   (sab/html [:div.container [:div.allcards
              ;[:h3 "yo"]])))
              (for [s SIDES] (cards-disp-side s cards-cur))]]))
+
+(defcard left-card 
+ (sab/html [:h1 "hi devcards"]))

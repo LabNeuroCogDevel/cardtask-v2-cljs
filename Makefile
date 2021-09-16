@@ -20,3 +20,6 @@ run-jar: psiclj/psiclj.jar
 
 debug-figwheel:
 	clj -Sdeps "{:deps {com.bhauman/figwheel-main {:mvn/version \"0.2.14\"}}}"  -m figwheel.main --print-config -b dev
+
+clj-deps:
+	clj -A:fig

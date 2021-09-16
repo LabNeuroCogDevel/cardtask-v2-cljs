@@ -14,8 +14,9 @@
                   com.bhauman/cljs-test-display {:mvn/version "0.1.1"}
                   philoskim/debux {:mvn/version "0.8.1"}
                   clj-commons/pomegranate {:mvn/version "1.2.1"}
+                  devcards/devcards {:mvn/version "0.2.5"}
                   }
                  :extra-paths ["target" "test"]}}
- :build {:main-opts ["-m" "figwheel.main" "-b" "dev" "-r"]}}
+ :build {:main-opts ["--main" "figwheel.main" "--build" "dev" "--repl"]}}
 
 ; clj -M --main cljs.main --compile cardtask.core
