@@ -14,7 +14,8 @@
   (println "sending state!")
   (POST (get-url "response")
         {;:params (.stringify js/JSON (clj->js @STATE))
-         :params @state
+         :params state
          :format :json
-         }))
+         })
+  (println "state sent!"))
 (defn send-finished [] (POST (get-url "finished")))
