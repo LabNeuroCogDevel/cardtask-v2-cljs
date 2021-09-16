@@ -1,7 +1,7 @@
 .PHONY: all run-clj run-bin run-jar
 all: psiclj/psiclj
 
-out/main.js: src/cardtask/core.cljs
+out/main.js: src/cardtask/*.cljs
 	clj -M --main cljs.main --optimizations advanced -c cardtask.core
 
 psiclj/psiclj: psiclj/src/psiclj.clj out/main.js
