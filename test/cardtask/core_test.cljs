@@ -1,6 +1,8 @@
 (ns cardtask.core-test
   (:require [cljs.test :refer-macros [async deftest is testing run-tests]]
-            [cardtask.core :refer [cards-pushed-side cards-cur-picked]]))
+            [cardtask.core :refer [cards-pushed-side cards-cur-picked]]
+            ;[cardtask.model :refer [cards-cur-picked]]
+))
 
 (deftest cards-pushed-side-test
   (let [cards-cur {:left {:keys [1 2] :middle nil :right {:keys [3 4]}}}]

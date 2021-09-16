@@ -1,4 +1,5 @@
 ^{:watch-dirs ["src" "test"]
-  :extra-main-files {:tests {:main hello-world.core-tests}}}
+  :css-dirs ["resources/public/"]
+  :extra-main-files {:tests {:main cardtask.core-tests}}}
 {:main cardtask.core :optimizations :none}
 ;{:main cardtask.core :optimizations :none :infer-externs true}
