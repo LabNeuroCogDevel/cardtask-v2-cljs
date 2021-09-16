@@ -20,7 +20,7 @@
 (defn npush-by-prob
   [probs]
   "require 5 pushes if always 100% prob of correct. 3 otherwise"
-  (if (every? #(= 100 %) probs) 3 MAXPUSH))
+  (if (every? #(= 100 %) probs) MAXPUSH 3))
 (defn card-side-zip [vals] (zipmap SIDES (take 3 (shuffle vals))))
 (defn mk-card-info []
   (let [;colors (card-side-zip ["lightblue", "red", "yellow", "lightgreen", "orange"])

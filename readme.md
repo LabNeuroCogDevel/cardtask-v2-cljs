@@ -1,4 +1,8 @@
 
+# TODO
+  * variable isi iti
+  * fixed scheduling
+
 # dev
 initial project looks like
 ```
@@ -16,3 +20,4 @@ emacs with cider (`cider-jack-in-cljs`)
 symlinked
  * out -> docs (can point gh pages there)
  * audio and style from resources/public/ into out
+
