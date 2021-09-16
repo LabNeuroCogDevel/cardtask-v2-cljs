@@ -3,11 +3,11 @@
    [cardtask.model :as model :refer [STATE]]
    [cardtask.settings :refer [KEYS any-accept-key]]
    [cardtask.cards :refer [SIDES CARDINFO CARDSLIST MAXPUSH cards-reset ]]
-   [cardtask.view :refer [cards-disp text-or-img img-url]]
+   [cardtask.view :as view :refer [cards-disp text-or-img img-url]]
    [cardtask.http :refer [send-info send-resp send-finished]]
    [cardtask.sound :refer [play-audio] :as sound]
-   [cardtask.instruction :as instruct :refer [instruction-keypress instruction]]
-   [cardtask.keypress :as key]
+   [cardtask.instruction :as instruct :refer [INSTRUCTIONS]];instruction-keypress instruction]]
+   [cardtask.keypress2 :as key :refer [KEYPRESSTIME keypress-init]]
    [cljs.spec.alpha :as s]
    [goog.string :refer [unescapeEntities]]
    [goog.events.KeyCodes :as keycodes]
@@ -22,6 +22,8 @@
   (:import [goog.events EventType]))
 (enable-console-print!)
 (set! *warn-on-infer* false) ; maybe want to be true
+(declare showme-this)
+(declare show-debug)
 
 ;;; 
 ;;; local keypress funcs
@@ -44,7 +46,7 @@
 
 (defn keyhold-card! [key] (println "hold key" key))
 
-(defn keypress-init-card [] (assoc (key/keypress-init)
+(defn keypress-init-card [] (assoc (keypress-init)
                                    :reset #'keypress-init-card
                                    :waiting (flatten (vals KEYS))
                                    :callback-first #'keydown-card!
@@ -205,8 +207,8 @@
         ;; responses@trial refers to future, soon to be current trial.
         cards-cur (cards-at-trial trial CARDSLIST)
         next-state (-> state (assoc :trial next-trial :cards-cur cards-cur))]
-    (reset! key/KEYPRESSTIME (keypress-init-card))
-    (println "updating keypress accepted" @key/KEYPRESSTIME)
+    (reset! KEYPRESSTIME (keypress-init-card))
+    (println "updating keypress accepted" @KEYPRESSTIME)
     (-> next-state
       ; remove picked (always null at start of trial)
       ;so it doesn't conflict with true source of info ":side"
@@ -314,6 +316,46 @@
   (cards-reset 3)
   (task-start))
 
+;;; 
+;;; instructions
+
+(defn instruction [inst-idx after-func state-atom]
+  (let [idx (max 0 inst-idx)
+        ninstruction (count INSTRUCTIONS)
+        instruction-go (fn [i] (instruction i after-func state-atom) )]
+
+    (reset! state-atom (assoc  @state-atom :instruction-idx idx))
+
+    ;TODO: maybe example trial here?
+
+    (showme-this
+     (if (< idx ninstruction)
+       (sab/html
+        [:div.instructions (show-debug @state-atom) (nth INSTRUCTIONS idx)
+         [:br]
+         [:button {:on-click (fn [_] (instruction-go (dec idx)))} "prev"]
+         [:button {:on-click (fn [_] (instruction-go (inc idx)))} "next"]])
+       (sab/html [:div
+                  [:p "Find a comfortable way to rest your fingers on the arrow keys!"]
+                  [:p "Push the space key when you're ready"]
+                  [:button {:on-click (fn [_] (after-func))}
+                   "I'm ready!"]])))))
+
+
+; TODO: add eg {:side-key-only :left :pushed 0 :need 3} to state
+(defn instruction-keypress [state-atom after-func key]
+  (let [iidx (:instruction-idx @state-atom)
+        ninstruction (count INSTRUCTIONS)
+        instruction-done? (>= iidx (inc ninstruction))
+        pushed (any-accept-key key)]
+  (when (and (not instruction-done?)  pushed)
+    (if (= ninstruction iidx)
+      (after-func)
+      (case pushed
+        :next  (instruction (min ninstruction (inc iidx)) after-func state-atom)
+        ;:left  (instruction (max 0 (dec iidx)))
+        ;:right (instruction (inc iidx))
+        (println "instuctions: pushed unused key " pushed))))))
 
 ;;; 
 ;;; view
@@ -347,6 +389,14 @@
      [:p.resp "nresp: " (-> state :responses count)]
      [:p.resp "resp: " (str (get-in state [:responses (dec (:trial state))]))]]))]))
 
+;;; 
+;;; display/render funcs
+(let [node (.getElementById js/document "task")]
+  (defn showme-this
+  "show a sab/html element where we'd normally run task-display"
+  [reactdom]
+    (.render js/ReactDOM reactdom node)))
+
 (defn task-display
   "html to render for display. updates for any change in display
    "
@@ -357,13 +407,6 @@
      (show-debug state) ; todo, hide behind (when DEBUG)
      (if f (f state))])))
 
-;;; 
-;;; display/render funcs
-(let [node (.getElementById js/document "task")]
-  (defn showme-this
-  "show a sab/html element where we'd normally run task-display"
-  [reactdom]
-    (.render js/ReactDOM reactdom node)))
 
 (defn renderer
   "used by watcher. triggered by animation step's change to time"
@@ -379,7 +422,7 @@
 
 
 (defn keypress-init-instruction []
-  (assoc (key/keypress-init)
+  (assoc (keypress-init)
          :reset #'keypress-init-instruction
          :waiting (:next KEYS)
          ;:callback-first #'keydown-card!
