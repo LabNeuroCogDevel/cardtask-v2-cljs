@@ -1,4 +1,4 @@
-.PHONY: all run-clj run-bin run-jar
+.PHONY: all run-clj run-bin run-jar debug-figwheel
 all: psiclj/psiclj
 
 out/main.js: src/cardtask/*.cljs
@@ -17,3 +17,6 @@ run-bin:  psiclj/psiclj
 	PORT=3003 psiclj/spiclj
 run-jar: psiclj/psiclj.jar
 	PORT=3004 java -cp psiclj/psiclj.jar clojure.main -m psiclj
+
+debug-figwheel:
+	clj -Sdeps "{:deps {com.bhauman/figwheel-main {:mvn/version \"0.2.14\"}}}"  -m figwheel.main --print-config -b dev
