@@ -7,10 +7,10 @@
         sablono/sablono {:mvn/version "0.7.5"}            ;; state<->dom
         philoskim/debux-stubs {:mvn/version "0.8.1"}      ;; noop leftover (dbg)
 }
- :paths ["resources" "src" "target"]
+ :paths ["resources" "src" "target" "test"]
  :aliases {:fig {:extra-deps
                  {com.bhauman/rebel-readline-cljs {:mvn/version "0.1.4"}
-                  com.bhauman/figwheel-main {:mvn/version "0.2.3"}
+                  com.bhauman/figwheel-main {:mvn/version "0.2.14"}
                   com.bhauman/cljs-test-display {:mvn/version "0.1.1"}
                   philoskim/debux {:mvn/version "0.8.1"}
                   clj-commons/pomegranate {:mvn/version "1.2.1"}

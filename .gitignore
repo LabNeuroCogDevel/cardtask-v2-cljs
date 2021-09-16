@@ -1,3 +1,9 @@
 out/
 .cpcache/
 config.sh
+*sqlite3
+classes/
+*artifact*
+resources/public/img/illustrations/
+resources/public/img/
+target/
