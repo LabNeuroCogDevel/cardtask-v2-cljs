@@ -12,7 +12,7 @@ psiclj/psiclj.jar: psiclj/src/psiclj.clj out/main.js
 	cd psiclj && clj -A:uberjar
 
 run-clj:  out/main.js
-	cd psiclj && PORT=3002 clj -m psiclj
+	PORT=3002 DATABASE_URL=`cat .localdburl` clojure -Sdeps '{:deps {psiclj {:local/root "psiclj"}}}' -m psiclj
 run-bin:  psiclj/psiclj
 	PORT=3003 psiclj/spiclj
 run-jar: psiclj/psiclj.jar

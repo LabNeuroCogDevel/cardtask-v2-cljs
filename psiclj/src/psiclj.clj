@@ -1,39 +1,66 @@
 (ns psiclj
   (:require
-   ; DB
+   ;; DB
    [hugsql.core :as hugsql]
-   ; HTTP - server
+   ;; HTTP - server
    [org.httpkit.server :as srv]
-   ; HTTP - routes
+   ;; HTTP - routes
    [clojure.java.io :as io]
    [compojure.core :refer [routes wrap-routes context defroutes GET POST] :as comp]
    [compojure.route :as route]
-   ;[ring.util.resposne :refer [resource-response]]
+   ;;[ring.util.resposne :refer [resource-response]]
    [ring.middleware.json :as json]
    [ring.util.response :as resp]
-)
+   ;; str split DATABASE_URL
+   [clojure.string :as str]
+   )
   (:gen-class))
 
 (def VERSION "20210909-init")
 
 ;; 
 ;; DB
-
-(defn get-db-params []
+(defn dburl-map
+  "extract db info from postgres://user:pass@host:port/db"
+  [dburl]
+  (zipmap [:dbtype :user :password :host :port :db]
+          (str/split dburl #"[:/@]+")))
+(defn jdbc-url
+  "make from map: //host:port/db?user=X&password=Y"
+  [{:keys [host port db user password]}]
+      (str ;; "jdbc:postgresql:"
+           "//" host ":" port
+           "/" db
+           "?user="  user
+           "&password=" password
+           ;; "&sslmode=require"
+           ))
+(defn db-to-jdbc
+  "parse DATABASE_URL to JDBC_DATABASE_URL
+  -> postgres://user:pass@host:port/db
+  <- //host:port/db?user=X&password=Y  ; NB no jdbc:postgresql:
+  "
+  [dburl] (-> dburl dburl-map jdbc-url))
+(defn get-db-params
   "setup database default to hardcoded psiclj.sqlite3. otherwise use postgres"
+  []
   (let [db (System/getenv "DATABASE_URL")]
     (if db
-      {:subprotocol "postgresql"
-       :subname db} ; //host:port/db_name?user=xxx&password=yyyy"
-      {:subprotocol "sqlite"
-       :classname "org.sqlite.JDBC"
-       :subname "psiclj.sqlite3"})))
+        {:subprotocol "postgresql"
+         :subname (db-to-jdbc db)}
+        {:subprotocol "sqlite"
+         :classname "org.sqlite.JDBC"
+         :subname "psiclj.sqlite3"})))
 
 (def DB (get-db-params))
 
 
 (hugsql/def-db-fns "all.sql")
 (hugsql/def-sqlvec-fns "all.sql")
+(defn create-run [db info]
+  (if (= "sqlite" (:subprotocol db))
+    (create-run db info)
+    (create-run-psql db info)))
 
 (defn already-done? [run-data] (-> DB (run-by-id run-data) :finished_at nil? not))
 
@@ -99,7 +126,7 @@
 (defonce server (atom nil))
 (defn -main [& args]
   (let [port (Integer/parseInt (or (System/getenv "PORT") "3001"))]
-    (println (str "creating run talbe on " (:subname DB)))
+    (println (str "creating run table on " DB))
     (create-run-table DB)
     (println (str "Running webserver on " port))
     (reset! server (srv/run-server #'app {:port port}))))

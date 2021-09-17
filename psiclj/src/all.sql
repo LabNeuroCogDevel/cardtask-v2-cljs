@@ -4,9 +4,9 @@
 -- :doc Create run table
 create table if not exists run (
   worker_id  text not null,
-  task_name  text not null default "card",
-  run_number int not null default 1,
-  timepoint int not null default 1,
+  task_name  text not null default 'card',
+  run_number varchar(2) not null default '1',
+  timepoint  varchar(2) not null default '1',
   version    text not null,
   json       text,
   system_info text,
@@ -33,10 +33,18 @@ create table worker (
 select * from run where worker_id = :id and task_name like :task
 
 --  :n returns affected row count
--- :name create-run :! :n
+-- :name create-run-sqll :! :n
 -- :doc create or update response. TODO: add run
 replace into run (worker_id, task_name, version, run_number, timepoint, system_info)
 values (:id, :task, :version, :run, :timepoint, :info)
+
+--  :n returns affected row count
+-- :name create-run-psql :! :n
+-- :doc create or update response. TODO: add run
+insert into run (worker_id, task_name, version, run_number, timepoint, system_info)
+values (:id, :task, :version, :run, :timepoint, :info)
+on conflict (worker_id,task_name,version, run_number, timepoint) do update set system_info = :info
+
 
 -- :name upload-json :! :n
 -- :doc create or update response. TODO: add run
