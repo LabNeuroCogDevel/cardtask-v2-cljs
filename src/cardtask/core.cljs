@@ -2,7 +2,7 @@
   (:require
    [cardtask.model :as model :refer [STATE]]
    [cardtask.settings :refer [KEYS any-accept-key]]
-   [cardtask.cards :refer [SIDES CARDINFO CARDSLIST MAXPUSH cards-reset ]]
+   [cardtask.cards :as cards :refer [SIDES CARDINFO CARDSLIST cards-reset]]
    [cardtask.view :as view :refer [cards-disp text-or-img img-url]]
    [cardtask.http :refer [send-info send-resp send-finished]]
    [cardtask.sound :refer [play-audio] :as sound]
@@ -10,7 +10,6 @@
    [cardtask.keypress2 :as key :refer [KEYPRESSTIME keypress-init]]
    [cljs.spec.alpha :as s]
    [goog.string :refer [unescapeEntities]]
-   [goog.events.KeyCodes :as keycodes]
    [goog.events :as gev]
    [cljsjs.react]
    [cljsjs.react.dom]
@@ -19,7 +18,7 @@
    [cljs.core.async :refer [<! chan sliding-buffer put! close! timeout]]
    )
   (:require-macros  [cljs.core.async.macros :refer [go-loop go]])
-  (:import [goog.events EventType]))
+  (:import [goog.events EventType KeyHandler]))
 (enable-console-print!)
 (set! *warn-on-infer* false) ; maybe want to be true
 (declare showme-this)
@@ -44,8 +43,6 @@
              (= event-name :card))
      (reset! STATE (model/state-add-response @STATE pushed side)))))
 
-(defn keyhold-card! [key] (println "hold key" key))
-
 (defn keypress-init-card [] (assoc (keypress-init)
                                    :reset #'keypress-init-card
                                    :waiting (flatten (vals KEYS))
@@ -53,8 +50,6 @@
                                    :callback-hold #'keydown-card!))
 ;; 
 ;; how to handle each event
-
-
 (defn animate-star
   [step]
   "animate sprite. step is 0 to 1"
@@ -174,12 +169,12 @@
                          (.toFixed 1)) " seconds")]))
 
 ;; settings for events
-(def EVENTDISPATCH {:start    {:dur 2000 :func (partial start-disp 2000) :next :card}
+(def EVENTDISPATCH (atom  {:start    {:dur 100 :func (partial start-disp 100) :next :card}
                     :card     {:dur 2000 :func #'cards-disp :next :feedback}
                     :feedback {:dur 1500 :func (partial feedback-disp 1500) :next :card}
                     :last-msg {:dur 1 :func #'finished-disp :next :done}
                     ; repeat last-message. maybe we don't need it
-                    :done     {:dur 0 :func #'finished-disp :next :done}})
+                    :done     {:dur 0 :func #'finished-disp :next :done}}))
 
 (defn state-out-of-trials? [trial cards-list]
   (>= trial (count cards-list)))
@@ -189,7 +184,9 @@
   ({card1} {card2}) to {:left {card1} :middle nil :right {card2}"
   [trial cards-list]
   (let [empty {:left nil :middle nil :right nil :picked nil}
-        cur-cards (if (state-out-of-trials? trial cards-list) nil (nth cards-list trial))
+        cur-cards (if (state-out-of-trials? trial cards-list)
+                    nil
+                    (nth cards-list trial))
         sidemap (map (fn [c] {(:side c) (dissoc c :side)}) cur-cards) ]
     (merge empty (reduce merge sidemap))))
 
@@ -208,7 +205,7 @@
         cards-cur (cards-at-trial trial CARDSLIST)
         next-state (-> state (assoc :trial next-trial :cards-cur cards-cur))]
     (reset! KEYPRESSTIME (keypress-init-card))
-    (println "updating keypress accepted" @KEYPRESSTIME)
+    (println "keypresstime: updating callback" @KEYPRESSTIME)
     (-> next-state
       ; remove picked (always null at start of trial)
       ;so it doesn't conflict with true source of info ":side"
@@ -247,7 +244,7 @@
   (let [cur time-cur
         last time-flip
         responsed-side (get-in state [:cards-cur :picked])
-        dispatch (event-name EVENTDISPATCH)
+        dispatch (event-name @EVENTDISPATCH)
         dur (:dur dispatch)
         finished? (and (= :feedback event-name) (state-out-of-trials? trial CARDSLIST))
         next (if finished? :last-msg (:next dispatch))
@@ -267,17 +264,30 @@
       state)))
 
 
+(defn update-held-keypress
+  "depricated.
+  update duration of held key. run by time-update.
+  possibly updates state to include picked side.
+  will play score sound"
+  [state {:keys [key first] :as keypress}]
+  (let
+      [side (cards-pushed-side key (:cards-cur @STATE))
+       time-step 30] ;; step hardcoded as animation time.
+      (if (and side (= (:event-name state) :card))
+        (model/state-inc-key-dur state side time-step)
+        state)))
+
 (defn time-update
   "what to do at each timestep of AnimationFrame (run-loop).
    first call will be on unintialized time values"
   [time state]
   (-> state
-     (assoc :time-cur time
-            :time-delta (- time (:start-time state))
-            :time-since (- time (:time-flip state)))
-     (event-next? time)
-     ; TODO: update based on KEYPRESSTIME
-))
+      (assoc :time-cur time
+             :time-delta (- time (:start-time state))
+             :time-since (- time (:time-flip state)))
+      (event-next? time)
+      ;; (update-held-keypress KEYPRESSTIME)
+      ))
 
 (defn run-loop [time]
   "recursive loop to keep the task running.
@@ -290,7 +300,9 @@
 (defn task-start
   "kick of run-loop. will stop if not :running?"
   []
-  ;(reset! KEYPRESSTIME (keypress-init-card)) ; done in task-next-trial
+  ;; need to reset keys for debug bar task-start command
+  ;; which doesn't hit task-next-trial
+  (reset! KEYPRESSTIME (keypress-init-card)) ; done in task-next-trial too
   (.requestAnimationFrame
    js/window
    (fn [time]
@@ -311,9 +323,10 @@
              (assoc :running? false
                     :no-debug-bar (:no-debug-bar STATE)))))
 
+(declare DEBUGSTATE)
 (defn task-restart []
   (task-stop)
-  (cards-reset 3)
+  (cards-reset @DEBUGSTATE)
   (task-start))
 
 ;;; 
@@ -362,32 +375,53 @@
 
 (defn state-toggle-setting [setting] (reset! STATE (update-in @STATE setting not)))
 
+(def DEBUGSTATE (atom {:push-min cards/MINPUSH
+                       :push-max cards/MAXPUSH
+                       :phase-reps 3}))
+(defn textbox-int [val] (-> val .-target .-value js/parseInt))
+(defn debug-update! [key val] (swap! DEBUGSTATE assoc key (textbox-int val)))
+(defn debug-cardtime! [val] (swap! EVENTDISPATCH assoc-in [:card :dur] (textbox-int val)))
+(defn clear-cur-card! []
+  (swap! STATE assoc :cards-cur (cards-at-trial (-> @STATE :trial dec) CARDSLIST)))
+
 (defn show-debug "debug info. displayed on top of task"
-[{:keys [:trial :event-name :score :time-cur :time-flip] :as state}]
-(sab/html
- [:div.debug
-  [:ul.bar {:class (if (:running? state) "running" "stoppped")}
-   [:li {:on-click task-toggle} "tog"]
-   [:li {:on-click task-restart}   "restart"]
-   [:li {:on-click (fn [_] cards-reset 3)}   "cards-reset"]
-   [:li {:on-click (fn [_] ((task-stop) (instruction 0 #'task-start STATE)))} "instructions"]
-   [:li {:on-click (fn [_] (play-audio {:url "audio/cash.mp3" :dur .5}))}  "cash"]
-   [:li {:on-click (fn [_] (play-audio {:url "audio/buzzer.mp3" :dur .5}))} "buz"]
-   ;[:li {:on-click (fn [_] (renderer (world state)))} "update-debug"]
-   [:li {:on-click (fn [_] (state-toggle-setting [:no-debug-bar]))} "debug-bar"]
-   [:li {:on-click (fn [_] (state-toggle-setting [:debug-no-advance]))} "no-advance"]
-  ]
-  ; double negative so default is true without explicity settings
-  (when (not (:no-debug-bar state))
-    (sab/html [:div.debug-extra-info
-     [:p.time (.toFixed (/ (- time-cur time-flip) 1000) 1)]
-     [:p.time (:time-since state)]
-     [:p.info (str "trial: " trial " @ " (name event-name))]
-     [:p.info "score: " score]
-     [:p.info "cards: " (str (:cards-cur state))]
-     [:p.info "no-adv: " (:debug-no-advance state) " " (:no-debug-bar state)]
-     [:p.resp "nresp: " (-> state :responses count)]
-     [:p.resp "resp: " (str (get-in state [:responses (dec (:trial state))]))]]))]))
+  [{:keys [:trial :event-name :score :time-cur :time-flip] :as state}]
+  (sab/html
+   [:div.debug
+    [:ul.bar {:class (if (:debug-no-advance state) "running" "stoppped")}
+     [:li {:on-click (fn [_] (state-toggle-setting [:debug-no-advance]))} "pause"]
+     [:li
+      "#" [:input {:size 1
+               :on-change #(debug-update! :phase-reps %)
+               :value (:phase-reps @DEBUGSTATE)}]
+      "min" [:input {:size 1
+               :on-change #(debug-update! :push-min %)
+               :value (:push-min @DEBUGSTATE)}]
+      "max" [:input {:size 1
+               :on-change #(debug-update! :push-max %)
+               :value (:push-max @DEBUGSTATE)}]
+      "wait" [:input {:size 3
+               :on-change #(debug-cardtime! %)
+                      :value (get-in @EVENTDISPATCH [:card :dur])}]]
+     [:li {:on-click task-restart}   "restart"]
+     [:li {:on-click clear-cur-card! }   "clear press"]
+     [:li {:on-click (fn [_] ((task-stop) (instruction 0 #'task-start STATE)))} "instructions"]
+     [:li {:on-click (fn [_] (play-audio {:url "audio/cash.mp3" :dur .5}))}  "cash"]
+     [:li {:on-click (fn [_] (play-audio {:url "audio/buzzer.mp3" :dur .5}))} "buz"]
+                                        ;[:li {:on-click (fn [_] (renderer (world state)))} "update-debug"]
+     [:li {:on-click (fn [_] (state-toggle-setting [:no-debug-bar]))} "debug-bar"]
+     [:li {:on-click task-toggle} "tog"]]
+                                        ; double negative so default is true without explicity settings
+    (when (not (:no-debug-bar state))
+      (sab/html [:div.debug-extra-info
+                 [:p.time (.toFixed (/ (- time-cur time-flip) 1000) 1)]
+                 [:p.time (:time-since state)]
+                 [:p.info (str "trial: " trial " @ " (name event-name))]
+                 [:p.info "score: " score]
+                 [:p.info "cards: " (str (:cards-cur state))]
+                 [:p.info "no-adv: " (:debug-no-advance state) " " (:no-debug-bar state)]
+                 [:p.resp "nresp: " (-> state :responses count)]
+                 [:p.resp "resp: " (str (get-in state [:responses (dec (:trial state))]))]]))]))
 
 ;;; 
 ;;; display/render funcs
@@ -397,14 +431,15 @@
   [reactdom]
     (.render js/ReactDOM reactdom node)))
 
+;;
+
 (defn task-display
-  "html to render for display. updates for any change in display
-   "
+  "html to render for display. updates for any change in display"
   [{:keys [cards-cur event-name score] :as state}]
-  (let [f (:func (event-name EVENTDISPATCH))]
+  (let [f (:func (event-name @EVENTDISPATCH))]
    (sab/html
     [:div.board
-     (show-debug state) ; todo, hide behind (when DEBUG)
+     (show-debug state) ; TODO, hide behind (when DEBUG)
      (if f (f state))])))
 
 
@@ -427,7 +462,7 @@
          :waiting (:next KEYS)
          ;:callback-first #'keydown-card!
          ;:callback-hold #'keyhold-card!
-         :callback-up (partial instruction-keypress STATE #'task-start)))
+         :callback-first (partial instruction-keypress STATE #'task-start)))
 
 
 
@@ -441,12 +476,21 @@
 
 
   (send-info)
-  (instruction 0 #'task-start STATE) ;(task-start)
 
-  ; should this go in instructions?
+  ; should keypress init be inside instructions?
   (reset! key/KEYPRESSTIME (keypress-init-instruction))
 
-  (.addEventListener js/document "keydown" (partial key/keypress-updown! :down))
-  (.addEventListener js/document "keyup" (partial key/keypress-updown! :up)))
+  (instruction 0 #'task-start STATE)
+  ;; no instructions? could jump right to task
+  ;;(task-start)
+
+
+  ;(.addEventListener js/document "keydown" (partial key/keypress-updown! :down))
+  ;(.addEventListener js/document "keyup" (partial key/keypress-updown! :up))
+  ;; (.addEventListener js/document "keyup" (partial key/keypress-updown! :key))
+  (gev/listen (KeyHandler. js/document)
+              (-> KeyHandler .-EventType .-KEY) ; "key", not same across browsers?
+              (partial key/keypress-updown! :key))
+  )
 
 (-main)

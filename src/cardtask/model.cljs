@@ -31,6 +31,19 @@
 })
 
 (def STATE (atom starting-state))
+
+(defn cards-cur-picked-by-dur
+  "check counts and pick a card
+  update :picked in {:left {..}, ..., :picked nil}"
+  [cards-cur side]
+  (let [already-picked (:picked cards-cur)
+        seen (-> cards-cur side :dur)
+        need (-> cards-cur side :dur-need)]
+  ;(println "should pick?" side seen need)
+    (if (and (>= seen need) (nil? already-picked))
+      (assoc cards-cur :picked  side)
+      cards-cur)))
+
 (defn cards-cur-picked
   "check counts and pick a card
   update :picked in {:left {..}, ..., :picked nil}"
@@ -60,7 +73,7 @@
         rt (- time fliptime)]
   {:side side :key pushed :rt rt :time time}))
 
-(dbgn (defn response-score
+(defn response-score
   "when a side has been picked, update w/side rt prob and points
   scoring (w/prob) happens here!"
   [response picked prob]
@@ -71,9 +84,7 @@
            :side picked
            :rt  (-> response :keys last :rt)
            :prob  prob
-           :get-points (sound/score-with-sound prob)))))
-
-
+           :get-points (sound/score-with-sound prob))))
 
 (defn state-add-response
   "modify state with a given keypress
@@ -96,7 +107,26 @@
                                   (key-resp (:time-flip-abs state) side pushed)))
         picked-side (get-in next-state [:cards-cur :picked])]
 
+    (println "add response" (:cards-cur next-state))
     (-> next-state
         (update-in [:responses trialidx0] #(response-score % picked-side card-prob))
         (update-score))))
 
+(defn state-inc-key-dur
+  "modify state with a given keyhold at each animation step
+  * cards-cur gets updated push inside side, might also set picked
+  * update response @ trial index
+  expects to be used to (reset!) somewhere else"
+  [{:keys [cards-cur trial] :as state} side step]
+  (let [trialidx0 (dec trial)
+        card-prob (-> cards-cur side :prob)
+        ;; ephemeral info in cards-cur, will be lost when trial changes
+        next-state (-> state
+                       (update-in [:cards-cur side :dur] (+ step))
+                       (update-in [:cards-cur] #(cards-cur-picked-by-dur % side))
+                       )
+        picked-side (get-in next-state [:cards-cur :picked])]
+
+    (-> next-state
+        (update-in [:responses trialidx0] #(response-score % picked-side card-prob))
+        (update-score))))

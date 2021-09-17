@@ -6,6 +6,7 @@
         cljsjs/react {:mvn/version "15.3.1-0"}            ;; for sablono
         sablono/sablono {:mvn/version "0.7.5"}            ;; state<->dom
         philoskim/debux-stubs {:mvn/version "0.8.1"}      ;; noop leftover (dbg)
+        devcards/devcards {:mvn/version "0.2.5"}
 }
  :paths ["resources" "src" "target" "test"]
  :aliases {:fig {:extra-deps
@@ -14,7 +15,6 @@
                   com.bhauman/cljs-test-display {:mvn/version "0.1.1"}
                   philoskim/debux {:mvn/version "0.8.1"}
                   clj-commons/pomegranate {:mvn/version "1.2.1"}
-                  devcards/devcards {:mvn/version "0.2.5"}
                   }
                  :extra-paths ["target" "test"]}}
  :build {:main-opts ["--main" "figwheel.main" "--build" "dev" "--repl"]}}

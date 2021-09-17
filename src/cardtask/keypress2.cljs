@@ -24,21 +24,24 @@
   ;(println "reset")
 )
 
+(defn waiting-key? [key] (some #(= key %) (:waiting @KEYPRESSTIME)))
+
+(defn keypress-key! [key time]
+  (when (waiting-key? key)
+    (swap! KEYPRESSTIME assoc :first time :key key :count 1)
+    (keypress-callback @KEYPRESSTIME :callback-first key)))
+
 (defn keypress-down! [key time]
-  (let [waitingkey? (some #(= key %) (:waiting @KEYPRESSTIME))
-        prev (:key @KEYPRESSTIME)
+  (let [prev (:key @KEYPRESSTIME)
         count (:count @KEYPRESSTIME)
         new? (or (not prev) (not= prev key)) ]
-    ;(println key waitingkey? new? prev count )
     ; missed a keyup (lost focus)
     (when (and prev new?)
       (keypress-up! prev time))
     ; hit a key we wanted
-    (when waitingkey?
+    (when (waiting-key? key)
       (if new?
-          (do
-              (swap! KEYPRESSTIME assoc :first time :key key)
-              (keypress-callback @KEYPRESSTIME :callback-first key))
+          (keypress-key! key time)
           (do
               (swap! KEYPRESSTIME assoc :count (inc count))
               (keypress-callback @KEYPRESSTIME :callback-hold key))))))
@@ -52,4 +55,5 @@
     (case direction
       :up   (keypress-up! key time)
       :down (keypress-down! key time)
+      :key  (keypress-key! key time)
       nil)))

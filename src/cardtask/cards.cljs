@@ -17,10 +17,15 @@
                     [100 100 100]]))
 
 (def MAXPUSH "most push that'd be required" 5)
+(def MINPUSH "fewest keys required" 1)
+(def MAXDUR "longest duration that'd be required" 500)
+(defn is-max-card [probs] (every? #(= 100 %) probs))
 (defn npush-by-prob
   [probs]
   "require 5 pushes if always 100% prob of correct. 3 otherwise"
-  (if (every? #(= 100 %) probs) MAXPUSH 3))
+  (if (is-max-card probs) MAXPUSH MINPUSH))
+
+(defn dur-by-prob [probs] (if (is-max-card probs) MAXDUR 300))
 (defn card-side-zip [vals] (zipmap SIDES (take 3 (shuffle vals))))
 (defn mk-card-info []
   (let [;colors (card-side-zip ["lightblue", "red", "yellow", "lightgreen", "orange"])
@@ -32,7 +37,9 @@
      {:color  colors
       :img    imgs
       :probs  probs
-      :pushes (zipmap SIDES (map npush-by-prob (vals probs)))}))
+      :pushes (zipmap SIDES (map npush-by-prob (vals probs)))
+      :dur-need (zipmap SIDES (map dur-by-prob (vals probs)))
+}))
 
 (defn mk-card-scheme
   [cardinfo reps]
@@ -67,8 +74,12 @@
    side is :left :middle :right. prob is 0-100"
   [side prob]
   {:side side :prob prob
+   ;; originally wanted to count keypushes
    :push-seen 0
    :push-need (get-in CARDINFO [:pushes side])
+   ;; 20210916 - maybe we want to hold instead of push
+   :dur 0
+   :dur-need (get-in CARDINFO [:dur-need side])
    :keys (side KEYS)
    :img (get-in CARDINFO [:img side])})
 
@@ -93,7 +104,10 @@
 
 (def CARDSLIST (mk-card-list CARDINFO 3))
 
-(defn cards-reset [reps-per-phase]
+(defn cards-reset
   "rerun random selection of card sym/img and color"
+ [{:keys [phase-reps push-min push-max]}]
+  (def MINPUSH push-min)
+  (def MAXPUSH push-max)
   (def CARDINFO (mk-card-info))
-  (def CARDSLIST (mk-card-list CARDINFO reps-per-phase)))
+  (def CARDSLIST (mk-card-list CARDINFO phase-reps)))
