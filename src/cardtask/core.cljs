@@ -357,7 +357,7 @@
          [:button {:on-click (fn [_] (instruction-go (inc idx)))} "next"]])
        (sab/html [:div
                   [:p "Find a comfortable way to rest your fingers on the arrow keys!"]
-                  [:p "Push the space key when you're ready"]
+                  [:p "You can click the buttons below or use the spacebar to start!"]
                   [:button {:on-click (fn [_] (after-func))}
                    "I'm ready!"]])))))
 
@@ -368,6 +368,8 @@
         ninstruction (count INSTRUCTIONS)
         instruction-done? (>= iidx (inc ninstruction))
         pushed (any-accept-key key)]
+
+
   (when (and (not instruction-done?)  pushed)
     (if (= ninstruction iidx)
       (after-func)
@@ -487,7 +489,6 @@
   (instruction 0 #'task-start STATE)
   ;; no instructions? could jump right to task
   ;;(task-start)
-
 
   ;(.addEventListener js/document "keydown" (partial key/keypress-updown! :down))
   ;(.addEventListener js/document "keyup" (partial key/keypress-updown! :up))

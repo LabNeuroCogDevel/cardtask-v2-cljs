@@ -9,14 +9,14 @@
   [
    (sab/html [:div [:h2 "Welcome to our card game!"]
               [:p "The game is to get as many points as you can by choosing the better card"]
-              [:p "Push the spacebar for the next instruction"]])
+              [:p "You can click the buttons below or use the spacebar for more insturctions"]])
    (sab/html [:div
               [:p "First lets test your speakers! Do you hear sounds when you push these buttons?"]
               [:button
-               {:on-click (fn [_] (play-audio {:url "audio/cash.mp3" :dur .5}))}
+               {:on-click (fn [_] (play-audio {:url "audio/cash.mp3" :dur .5} 1))}
                "points"]
               [:button
-               {:on-click (fn [_] (play-audio {:url "audio/buzzer.mp3" :dur .5}))}
+               {:on-click (fn [_] (play-audio {:url "audio/buzzer.mp3" :dur .5} 1))}
                "no points"]])
    (sab/html [:div [:h3 "Rules of the game"]
               [:ul [:li "Some cards are better at getting points than others"]
