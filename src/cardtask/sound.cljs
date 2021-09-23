@@ -13,19 +13,25 @@
                       ;{:url "audio/cry.mp3"     :dur .5}
                       ;{:url "audio/alarm.mp3"   :dur .5}
                       ]})
-(defn preload-sounds
-  "load all the sounds w/out playing them first"
-  []
-    (for [url (map #(:url %) (flatten (vals SOUNDS)))] syn/sample))
 
 ; NB. could use e.g. (syn/square 440) for beeeeep
 (defn play-audio
-  [{:keys [url dur]}]
+  [{:keys [url dur]} gain]
   (syn/run-with
-   (syn/connect-> (syn/sample url) syn/destination)
+   (syn/connect->
+    (syn/sample url)
+    (syn/gain gain) ; 0 for reploading
+    syn/destination)
    audio-context
    (syn/current-time audio-context)
    dur))
+
+(defn preload-sounds
+  "load all the sounds, playing at 0 volume"
+  []
+    (for [sound (mapcat #(% SOUNDS) (keys SOUNDS))]
+      (do (println sound)
+      (play-audio sound 0))))
 
 
 (defn score-with-sound
@@ -34,5 +40,5 @@
   (let [get-points (utils/prob-gets-points? prob)
         rew-key  (if get-points :reward :empty)
         snd (first (shuffle (rew-key SOUNDS)))]
-  (play-audio snd)
+  (play-audio snd 1)
   get-points))

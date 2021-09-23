@@ -339,6 +339,13 @@
 
     (reset! state-atom (assoc  @state-atom :instruction-idx idx))
 
+    ;; play sound w/o volume after first keypress
+    ;; kludge to load sound before they're used
+    (when (= idx 1)
+      (println "preloading sounds")
+      (doall (sound/preload-sounds)))
+
+
     ;TODO: maybe example trial here?
 
     (showme-this
@@ -406,8 +413,8 @@
      [:li {:on-click task-restart}   "restart"]
      [:li {:on-click clear-cur-card! }   "clear press"]
      [:li {:on-click (fn [_] ((task-stop) (instruction 0 #'task-start STATE)))} "instructions"]
-     [:li {:on-click (fn [_] (play-audio {:url "audio/cash.mp3" :dur .5}))}  "cash"]
-     [:li {:on-click (fn [_] (play-audio {:url "audio/buzzer.mp3" :dur .5}))} "buz"]
+     [:li {:on-click (fn [_] (play-audio {:url "audio/cash.mp3" :dur .5} 1))}  "cash"]
+     [:li {:on-click (fn [_] (play-audio {:url "audio/buzzer.mp3" :dur .5} 1))} "buz"]
                                         ;[:li {:on-click (fn [_] (renderer (world state)))} "update-debug"]
      [:li {:on-click (fn [_] (state-toggle-setting [:no-debug-bar]))} "debug-bar"]
      [:li {:on-click task-toggle} "tog"]]
@@ -468,9 +475,6 @@
 
 (defn -main []
   (add-watch STATE :renderer (fn [_ _ _ n] (renderer (world n))))
-  ; doesn't work
-  (sound/preload-sounds)
-
   ; TODO: this should go into state-fresh?
   (reset! STATE  @STATE) ; why ?
 
