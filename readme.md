@@ -1,4 +1,8 @@
 
+# Demo
+ * running on github pages https://labneurocogdevel.github.io/cardtask-v2-cljs/
+ * heroku https://habittask.herokuapp.com/ $id/habittask/$tp/$run (very slow startup!)
+
 # TODO
   * variable isi iti
   * fixed scheduling
