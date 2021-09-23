@@ -16,7 +16,7 @@
                     [20   80 100]
                     [100 100 100]]))
 
-(def MAXPUSH "most push that'd be required" 5)
+(def MAXPUSH "most push that'd be required" 20)
 (def MINPUSH "fewest keys required" 1)
 (def MAXDUR "longest duration that'd be required" 500)
 (defn is-max-card [probs] (every? #(= 100 %) probs))

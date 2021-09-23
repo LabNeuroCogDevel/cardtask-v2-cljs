@@ -6,7 +6,7 @@
    [cardtask.view :as view :refer [cards-disp text-or-img img-url]]
    [cardtask.http :refer [send-info send-resp send-finished]]
    [cardtask.sound :refer [play-audio] :as sound]
-   [cardtask.instruction :as instruct :refer [INSTRUCTIONS]];instruction-keypress instruction]]
+   [cardtask.instruction :as instruct :refer [INSTRUCTIONS instruction-html]]
    [cardtask.keypress2 :as key :refer [KEYPRESSTIME keypress-init]]
    [cljs.spec.alpha :as s]
    [goog.string :refer [unescapeEntities]]
@@ -23,6 +23,8 @@
 (set! *warn-on-infer* false) ; maybe want to be true
 (declare showme-this)
 (declare show-debug)
+(declare keypress-init-instruction)
+
 
 ;;; 
 ;;; local keypress funcs
@@ -320,8 +322,7 @@
   (reset! STATE
          (-> @STATE
              (state-fresh 0)
-             (assoc :running? false
-                    :no-debug-bar (:no-debug-bar STATE)))))
+             (assoc :running? false))))
 
 (declare DEBUGSTATE)
 (defn task-restart []
@@ -331,42 +332,19 @@
 
 ;;; 
 ;;; instructions
-
 (defn instruction [inst-idx after-func state-atom]
-  (let [idx (max 0 inst-idx)
-        ninstruction (count INSTRUCTIONS)
-        instruction-go (fn [i] (instruction i after-func state-atom) )]
-
-    (reset! state-atom (assoc  @state-atom :instruction-idx idx))
-
-    ;; play sound w/o volume after first keypress
-    ;; kludge to load sound before they're used
-    (when (= idx 1)
-      (println "preloading sounds")
-      (doall (sound/preload-sounds)))
-
-
-    ;TODO: maybe example trial here?
-
-    (showme-this
-     (if (< idx ninstruction)
-       (sab/html
-        [:div.instructions (show-debug @state-atom) (nth INSTRUCTIONS idx)
-         [:br]
-         [:button {:on-click (fn [_] (instruction-go (dec idx)))} "prev"]
-         [:button {:on-click (fn [_] (instruction-go (inc idx)))} "next"]])
-       (sab/html [:div
-                  [:p "Find a comfortable way to rest your fingers on the arrow keys!"]
-                  [:p "You can click the buttons below or use the spacebar to start!"]
-                  [:button {:on-click (fn [_] (after-func))}
-                   "I'm ready!"]])))))
-
+  (showme-this
+   (sab/html [:div
+              (show-debug @state-atom)
+              (instruction-html instruction inst-idx after-func state-atom)])))
 
 ; TODO: add eg {:side-key-only :left :pushed 0 :need 3} to state
 (defn instruction-keypress [state-atom after-func key]
   (let [iidx (:instruction-idx @state-atom)
         ninstruction (count INSTRUCTIONS)
         instruction-done? (>= iidx (inc ninstruction))
+        instruction-go (fn[i] (instruction (min ninstruction i)
+                                          after-func state-atom))
         pushed (any-accept-key key)]
 
 
@@ -374,8 +352,16 @@
     (if (= ninstruction iidx)
       (after-func)
       (case pushed
-        :next  (instruction (min ninstruction (inc iidx)) after-func state-atom)
-        ;:left  (instruction (max 0 (dec iidx)))
+        :next   (instruction-go (min ninstruction (inc iidx)))
+        :left   (do
+                  (swap! instruct/example-atom update-in [:left :push-seen] inc)
+                  (instruction-go iidx))
+        :right  (do
+                  (swap! instruct/example-atom update-in [:right :push-seen] inc)
+                  (instruction-go iidx))
+        :middle (do
+                  (swap! instruct/example-atom update-in [:middle :push-seen] inc)
+                  (instruction-go iidx))
         ;:right (instruction (inc iidx))
         (println "instuctions: pushed unused key " pushed))))))
 
@@ -414,7 +400,11 @@
                       :value (get-in @EVENTDISPATCH [:card :dur])}]]
      [:li {:on-click task-restart}   "restart"]
      [:li {:on-click clear-cur-card! }   "clear press"]
-     [:li {:on-click (fn [_] ((task-stop) (instruction 0 #'task-start STATE)))} "instructions"]
+     [:li {:on-click (fn [_] ((task-stop)
+                             (swap! STATE assoc :instruction-idx 0)
+                             (reset! key/KEYPRESSTIME (keypress-init-instruction))
+                             (instruction 0 #'task-start STATE)))}
+      "instructions"]
      [:li {:on-click (fn [_] (play-audio {:url "audio/cash.mp3" :dur .5} 1))}  "cash"]
      [:li {:on-click (fn [_] (play-audio {:url "audio/buzzer.mp3" :dur .5} 1))} "buz"]
                                         ;[:li {:on-click (fn [_] (renderer (world state)))} "update-debug"]
@@ -468,7 +458,7 @@
 (defn keypress-init-instruction []
   (assoc (keypress-init)
          :reset #'keypress-init-instruction
-         :waiting (:next KEYS)
+         :waiting  (flatten (vals KEYS))
          ;:callback-first #'keydown-card!
          ;:callback-hold #'keyhold-card!
          :callback-first (partial instruction-keypress STATE #'task-start)))
