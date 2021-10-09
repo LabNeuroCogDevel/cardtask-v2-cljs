@@ -59,7 +59,7 @@
 (hugsql/def-sqlvec-fns "all.sql")
 (defn create-run [db info]
   (if (= "sqlite" (:subprotocol db))
-    (create-run db info)
+    (create-run-sqll db info)
     (create-run-psql db info)))
 
 (defn already-done? [run-data] (-> DB (run-by-id run-data) :finished_at nil? not))
